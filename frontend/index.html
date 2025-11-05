@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NLytics - Conversational Data Analytics</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <h1>📊 NLytics</h1>
+                <p class="tagline">Ask questions, get insights</p>
+            </div>
+            <div class="header-actions">
+                <button id="upload-btn" class="btn btn-primary">
+                    📤 Upload Data
+                </button>
+                <input type="file" id="file-input" accept=".csv,.xlsx,.xls" style="display: none;">
+            </div>
+        </header>
+
+        <!-- Chat Container -->
+        <main class="chat-container">
+            <div id="messages" class="messages-list">
+                <!-- Messages will be dynamically added here -->
+            </div>
+
+            <!-- Loading indicator -->
+            <div id="loading" class="loading-indicator" style="display: none;">
+                <span class="loading-dots">●●●</span>
+                <span class="loading-text">Processing...</span>
+            </div>
+        </main>
+
+        <!-- Input Area -->
+        <footer class="input-area">
+            <div class="input-container">
+                <textarea 
+                    id="user-input" 
+                    placeholder="Ask a question about your data..." 
+                    rows="1"
+                    disabled
+                ></textarea>
+                <button id="send-btn" class="btn btn-send" disabled>
+                    <span class="send-icon">➤</span>
+                </button>
+            </div>
+            <div class="input-help">
+                Upload a file to start analyzing your data
+            </div>
+        </footer>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
