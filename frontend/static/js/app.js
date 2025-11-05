@@ -365,13 +365,18 @@ class NLyticsApp {
         // Use actual data from backend visualization config
         
         if (viz.type === 'bar') {
+            // Use colors from backend if provided, otherwise generate colorful palette
+            const colors = viz.colors || this.generateColorPalette(viz.y_values?.length || 0);
+            const borderColors = colors.map(c => this.adjustColorOpacity(c, 1.0));
+            const bgColors = colors.map(c => this.adjustColorOpacity(c, 0.8));
+            
             return {
                 labels: viz.x_values || [],
                 datasets: [{
                     label: viz.y_label || 'Values',
                     data: viz.y_values || [],
-                    backgroundColor: 'rgba(79, 70, 229, 0.6)',
-                    borderColor: 'rgba(79, 70, 229, 1)',
+                    backgroundColor: bgColors,
+                    borderColor: borderColors,
                     borderWidth: 2,
                     borderRadius: 6
                 }]
@@ -384,32 +389,66 @@ class NLyticsApp {
                 y: (viz.y_values || [])[i]
             }));
             
+            const pointColor = viz.point_color || '#3b82f6';
+            
             return {
                 datasets: [{
                     label: viz.y_label || 'Data Points',
                     data: points,
-                    backgroundColor: 'rgba(79, 70, 229, 0.6)',
-                    borderColor: 'rgba(79, 70, 229, 1)',
-                    pointRadius: 5
+                    backgroundColor: this.adjustColorOpacity(pointColor, 0.6),
+                    borderColor: pointColor,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
                 }]
             };
         }
         
         if (viz.type === 'line') {
+            const lineColor = viz.line_color || '#3b82f6';
+            
             return {
                 labels: viz.x_values || [],
                 datasets: [{
                     label: viz.y_label || 'Trend',
                     data: viz.y_values || [],
-                    borderColor: 'rgba(79, 70, 229, 1)',
-                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                    borderColor: lineColor,
+                    backgroundColor: this.adjustColorOpacity(lineColor, 0.1),
                     tension: 0.3,
-                    fill: true
+                    fill: true,
+                    pointBackgroundColor: lineColor,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
                 }]
             };
         }
         
         return null;
+    }
+    
+    generateColorPalette(count) {
+        // Professional, vibrant color palette matching backend
+        const baseColors = [
+            '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+            '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
+            '#6366f1', '#84cc16', '#06b6d4', '#f43f5e'
+        ];
+        
+        const colors = [];
+        for (let i = 0; i < count; i++) {
+            colors.push(baseColors[i % baseColors.length]);
+        }
+        return colors;
+    }
+    
+    adjustColorOpacity(hexColor, opacity) {
+        // Convert hex to rgba with specified opacity
+        const hex = hexColor.replace('#', '');
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        return `rgba(${r}, ${g}, ${b}, ${opacity})`;
     }
     
     showLoading(text = 'Processing...') {

@@ -146,6 +146,33 @@ class InsightGenerator:
             'recommendations': ["Break down by category", "Compare with other metrics"]
         }
     
+    def _get_color_palette(self, count: int) -> List[str]:
+        """Generate vibrant, professional color palette for charts"""
+        # Professional, vibrant color palette
+        base_colors = [
+            '#3b82f6',  # Blue
+            '#10b981',  # Green
+            '#f59e0b',  # Amber
+            '#ef4444',  # Red
+            '#8b5cf6',  # Purple
+            '#ec4899',  # Pink
+            '#14b8a6',  # Teal
+            '#f97316',  # Orange
+            '#6366f1',  # Indigo
+            '#84cc16',  # Lime
+            '#06b6d4',  # Cyan
+            '#f43f5e',  # Rose
+        ]
+        
+        if count <= len(base_colors):
+            return base_colors[:count]
+        
+        # If more colors needed, cycle through with slight variations
+        colors = []
+        for i in range(count):
+            colors.append(base_colors[i % len(base_colors)])
+        return colors
+    
     def _suggest_visualization(self, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
         """Suggest appropriate visualization based on data shape"""
         rows, cols = df.shape
@@ -169,6 +196,9 @@ class InsightGenerator:
             # Add metric explanation
             metric_explanation = self._explain_metric(num_col)
             
+            # Get colorful palette
+            colors = self._get_color_palette(len(top_data))
+            
             return {
                 'type': 'bar',
                 'suitable': True,
@@ -176,6 +206,7 @@ class InsightGenerator:
                 'y_column': num_col,
                 'x_values': top_data[cat_col].tolist(),
                 'y_values': top_data[num_col].tolist(),
+                'colors': colors,
                 'description': f"{metric_explanation} by {cat_col}",
                 'y_label': metric_explanation
             }
@@ -194,6 +225,7 @@ class InsightGenerator:
                 'y_column': y_col,
                 'x_values': sample_df[x_col].tolist(),
                 'y_values': sample_df[y_col].tolist(),
+                'point_color': '#3b82f6',
                 'description': f"Scatter plot of {y_col} vs {x_col}"
             }
         elif len(numeric_cols) == 1:
@@ -205,12 +237,16 @@ class InsightGenerator:
             hist, bin_edges = pd.cut(values, bins=10, retbins=True, duplicates='drop')
             bin_counts = hist.value_counts().sort_index()
             
+            # Gradient colors for histogram
+            colors = self._get_color_palette(len(bin_counts))
+            
             return {
                 'type': 'bar',  # Use bar for histogram
                 'suitable': True,
                 'column': num_col,
                 'x_values': [f"{edge:.2f}" for edge in bin_edges[:-1]],
                 'y_values': bin_counts.tolist(),
+                'colors': colors,
                 'description': f"Distribution of {num_col}",
                 'y_label': 'Count'
             }

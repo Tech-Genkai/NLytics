@@ -34,6 +34,7 @@ from services.safe_executor import SafeExecutor
 from services.insight_generator import InsightGenerator
 from services.answer_synthesizer import AnswerSynthesizer
 from models.chat_message import ChatMessage, MessageType
+from api.analytics_api import api_blueprint, init_api
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -81,6 +82,25 @@ answer_synthesizer = AnswerSynthesizer()
 
 # In-memory session store (will be replaced with proper storage later)
 sessions = {}
+
+# Initialize REST API with service instances
+service_dict = {
+    'file_handler': file_handler,
+    'schema_inspector': schema_inspector,
+    'preprocessor': preprocessor,
+    'intent_detector': intent_detector,
+    'query_refiner': query_refiner,
+    'query_planner': query_planner,
+    'code_generator': code_generator,
+    'code_validator': code_validator,
+    'safe_executor': safe_executor,
+    'insight_generator': insight_generator,
+    'answer_synthesizer': answer_synthesizer
+}
+init_api(service_dict, sessions)
+
+# Register API blueprint
+app.register_blueprint(api_blueprint)
 
 
 def convert_numpy_types(obj):
@@ -598,15 +618,24 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'version': '0.3.0',
-        'phases_complete': ['Foundation', 'Preprocessing', 'Conversational Intake'],
-        'features': [
-            'File Upload',
-            'Data Cleaning',
-            'Health Reports',
-            'Intent Detection',
-            'Query Execution'
-        ]
+        'version': '1.0.0',
+        'api_version': 'v1',
+        'features': {
+            'chat_interface': True,
+            'rest_api': True,
+            'code_generation': True,
+            'visualization': True,
+            'colorful_charts': True
+        },
+        'endpoints': {
+            'chat': '/api/chat',
+            'rest_api': '/api/v1/',
+            'analyze': '/api/v1/analyze',
+            'query': '/api/v1/query',
+            'validate_code': '/api/v1/code/validate',
+            'execute_code': '/api/v1/code/execute',
+            'status': '/api/v1/status/<session_id>'
+        }
     })
 
 

@@ -175,8 +175,31 @@ python backend/tests/automated_test.py --categories "Basic Aggregations" "Comple
 
 Test categories include: Basic Aggregations, Growth & Performance, Sector Analysis, Complex Queries, Statistical Insights, Rankings, Investment Screening, Natural Language, Edge Cases.
 
+## REST API
+
+NLytics provides a comprehensive REST API for programmatic access:
+
+```bash
+# Complete analysis in one call
+curl -X POST http://localhost:5000/api/v1/analyze \
+  -F "file=@data.csv" \
+  -F "query=highest stock by volume"
+
+# Response includes: code, result, visualization, insights, answer
+```
+
+**Available Endpoints:**
+- `POST /api/v1/analyze` - Upload & analyze in one call
+- `POST /api/v1/query` - Query existing session
+- `GET /api/v1/status/<session_id>` - Get session status
+- `POST /api/v1/code/validate` - Validate code
+- `POST /api/v1/code/execute` - Execute code
+
+See `docs/API.md` for complete API documentation with examples.
+
 ## Documentation
 
+- `docs/API.md` - Complete REST API documentation
 - `docs/AI_SETUP.md` - Groq API configuration
 - `docs/TROUBLESHOOTING.md` - Common issues and solutions
 - `docs/PROJECT_COMPLETE.md` - Complete technical architecture
