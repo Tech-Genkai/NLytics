@@ -6,7 +6,9 @@
 class NLyticsApp {
     constructor() {
         this.sessionId = null;
-        this.apiUrl = 'http://localhost:5000/api';
+        this.apiUrl = window.location.hostname === 'localhost' 
+            ? 'http://localhost:5000/api' 
+            : 'https://nlytics.onrender.com/api';
         
         // DOM elements
         this.messagesList = document.getElementById('messages');

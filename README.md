@@ -4,6 +4,8 @@
 
 NLytics is an AI-driven data analysis platform that converts natural language queries into executable analytics code. Built for data analysts, researchers, and business users who need rapid insights without manual coding.
 
+🚀 **[Live Demo on Render](https://nlytics.onrender.com)** 🚀
+
 ## Architecture
 
 NLytics employs a 9-phase AI pipeline that transforms conversational queries into validated, executable analytics:
@@ -195,7 +197,7 @@ NLytics provides a REST API for programmatic access:
 
 ```bash
 # Complete analysis in one call
-curl -X POST http://localhost:5000/api/v1/analyze \
+curl -X POST https://nlytics.onrender.com/api/v1/analyze \
   -F "file=@data.csv" \
   -F "query=highest stock by volume"
 ```

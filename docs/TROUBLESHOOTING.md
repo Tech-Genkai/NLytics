@@ -78,7 +78,8 @@ app.run(debug=True, port=5001, host='0.0.0.0')
 **Problem:** Wrong URL or routing issue
 
 **Solution:**
-- Use http://localhost:5000 (not http://localhost:5000/index.html)
+- Production: Use https://nlytics.onrender.com
+- Local: Use http://localhost:5000 (not /index.html)
 - Clear browser cache
 - Check server console for errors
 
@@ -328,11 +329,11 @@ cd backend
 ### Debug Checklist:
 
 1. ✅ Python 3.9+ installed
-2. ✅ Virtual environment activated
+2. ✅ Virtual environment activated (for local dev)
 3. ✅ All dependencies installed (`pip install -r requirements.txt`)
 4. ✅ Server running without errors
 5. ✅ Browser console shows no errors (F12)
-6. ✅ Correct URL: http://localhost:5000
+6. ✅ Correct URL: https://nlytics.onrender.com (or http://localhost:5000 for local)
 7. ✅ File format is CSV or Excel
 8. ✅ File size under 50MB
 

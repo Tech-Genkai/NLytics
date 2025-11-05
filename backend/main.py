@@ -24,6 +24,13 @@ logger = logging.getLogger(__name__)
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
+# Add backend directory to path for imports when running via Gunicorn
+import sys
+if os.environ.get('FLASK_ENV') == 'production':
+    backend_dir = Path(__file__).parent
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
+
 from services.file_handler import FileHandler
 from services.schema_inspector import SchemaInspector
 from services.preprocessor import DataPreprocessor

@@ -4,7 +4,7 @@
 
 NLytics provides a REST API for programmatic access to analytics functionality. This is a **proof-of-concept API** demonstrating AI-powered natural language to pandas code generation.
 
-**Base URL**: `http://localhost:5000/api/v1` (or your deployed URL)
+**Base URL**: `https://nlytics.onrender.com/api/v1`
 
 **Version**: 1.0.0
 
@@ -32,7 +32,7 @@ Upload data and get complete analysis in a single request.
 
 **Example Request**:
 ```bash
-curl -X POST http://localhost:5000/api/v1/analyze \
+curl -X POST https://nlytics.onrender.com/api/v1/analyze \
   -F "file=@stock_data.csv" \
   -F "query=highest growing stock" \
   -F "return_code=true"
@@ -112,7 +112,7 @@ Execute query on existing session.
 
 **Example**:
 ```bash
-curl -X POST http://localhost:5000/api/v1/query \
+curl -X POST https://nlytics.onrender.com/api/v1/query \
   -H "Content-Type: application/json" \
   -d '{"session_id": "abc-123", "query": "top 10 by volume"}'
 ```
@@ -144,7 +144,7 @@ Check session status and dataset info.
 
 **Example**:
 ```bash
-curl http://localhost:5000/api/v1/status/abc-123
+curl https://nlytics.onrender.com/api/v1/status/abc-123
 ```
 
 ---
@@ -174,7 +174,7 @@ Validate Python code without execution.
 
 **Example**:
 ```bash
-curl -X POST http://localhost:5000/api/v1/code/validate \
+curl -X POST https://nlytics.onrender.com/api/v1/code/validate \
   -H "Content-Type: application/json" \
   -d '{"code": "df.nlargest(10, \"Close\")", "columns": ["Close"]}'
 ```
@@ -206,7 +206,7 @@ Execute validated code on session dataset.
 
 **Example**:
 ```bash
-curl -X POST http://localhost:5000/api/v1/code/execute \
+curl -X POST https://nlytics.onrender.com/api/v1/code/execute \
   -H "Content-Type: application/json" \
   -d '{"session_id": "abc-123", "code": "df.describe()"}'
 ```
@@ -297,7 +297,7 @@ import requests
 # Upload and analyze
 with open('data.csv', 'rb') as f:
     response = requests.post(
-        'http://localhost:5000/api/v1/analyze',
+        'https://nlytics.onrender.com/api/v1/analyze',
         files={'file': f},
         data={
             'query': 'show me top 10 stocks by volume',
@@ -326,7 +326,7 @@ const formData = new FormData();
 formData.append('file', fileInput.files[0]);
 formData.append('query', 'average price by sector');
 
-const response = await fetch('http://localhost:5000/api/v1/analyze', {
+const response = await fetch('https://nlytics.onrender.com/api/v1/analyze', {
   method: 'POST',
   body: formData
 });
