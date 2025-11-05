@@ -669,5 +669,10 @@ if __name__ == '__main__':
     print("🚀 NLytics Backend starting...")
     print(f"📁 Upload folder: {app.config['UPLOAD_FOLDER']}")
     print(f"📁 Processed folder: {app.config['PROCESSED_FOLDER']}")
-    app.run(debug=True, port=5000, host='0.0.0.0')
+    
+    # Development server only - use Gunicorn for production
+    debug_mode = os.environ.get('FLASK_ENV') == 'development'
+    port = int(os.environ.get('PORT', 5000))
+    
+    app.run(debug=debug_mode, port=port, host='0.0.0.0')
 

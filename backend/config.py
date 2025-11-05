@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Flask settings
 SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+DEBUG = os.environ.get('FLASK_ENV', 'development') == 'development'
 
 # File upload settings
 MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
