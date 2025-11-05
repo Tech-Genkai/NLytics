@@ -14,6 +14,7 @@ import logging
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from pathlib import Path
+from typing import Dict, Any
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -36,6 +37,44 @@ from services.insight_generator import InsightGenerator
 from services.answer_synthesizer import AnswerSynthesizer
 from models.chat_message import ChatMessage, MessageType
 from api.analytics_api import api_blueprint, init_api
+
+
+def handle_error(session_id: str, error: Exception, context: str = "") -> Dict[str, Any]:
+    """Consistent error handling across all endpoints"""
+    error_type = type(error).__name__
+    error_msg = str(error)
+    
+    # Log with context
+    logger.error(f"Error in {context}: {error_type} - {error_msg}", exc_info=True)
+    
+    # Create user-friendly message
+    friendly_messages = {
+        'EmptyDataError': "The file appears to be empty. Please upload a valid CSV or Excel file with data.",
+        'ParserError': "I couldn't parse this file. Please ensure it's a valid CSV or Excel file with proper formatting.",
+        'MemoryError': "This file is too large to process. Please try a smaller dataset (under 100K rows).",
+        'KeyError': "I couldn't find the required data. Please try uploading your file again.",
+        'FileNotFoundError': "I couldn't find your uploaded file. Please try uploading again.",
+        'ValueError': f"Invalid data: {error_msg}",
+        'TimeoutError': "This query took too long to execute. Please try a simpler query.",
+    }
+    
+    user_message = friendly_messages.get(error_type, 
+        f"Sorry, I encountered an unexpected error. Please try again or simplify your query.")
+    
+    error_chat_msg = ChatMessage(
+        type=MessageType.ERROR,
+        content=f"❌ {user_message}",
+        metadata={
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'error_type': error_type,
+            'context': context
+        }
+    )
+    
+    if session_id and session_id in sessions:
+        sessions[session_id]['messages'].append(error_chat_msg.to_dict())
+    
+    return error_chat_msg.to_dict()
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -243,51 +282,10 @@ def upload_file():
             'dataset_id': file_id
         })
         
-    except pd.errors.EmptyDataError:
-        logger.error("Empty file uploaded")
-        error_msg = ChatMessage(
-            type=MessageType.ERROR,
-            content=f"❌ The file appears to be empty. Please upload a valid CSV or Excel file with data.",
-            metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
-        )
-        sessions[session_id]['messages'].append(error_msg.to_dict())
-        return jsonify({'success': False, 'message': error_msg.to_dict()}), 400
-    
-    except pd.errors.ParserError as e:
-        logger.error(f"File parsing error: {e}")
-        error_msg = ChatMessage(
-            type=MessageType.ERROR,
-            content=f"❌ I couldn't parse this file. Please ensure it's a valid CSV or Excel file with proper formatting.",
-            metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
-        )
-        sessions[session_id]['messages'].append(error_msg.to_dict())
-        return jsonify({'success': False, 'message': error_msg.to_dict()}), 400
-    
-    except MemoryError:
-        logger.error("File too large - memory error")
-        error_msg = ChatMessage(
-            type=MessageType.ERROR,
-            content=f"❌ This file is too large to process. Please try a smaller dataset (under 100K rows).",
-            metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
-        )
-        sessions[session_id]['messages'].append(error_msg.to_dict())
-        return jsonify({'success': False, 'message': error_msg.to_dict()}), 413
-    
-    except Exception as e:
-        import traceback
-        logger.error(f"Upload error: {str(e)}", exc_info=True)
-        
-        error_msg = ChatMessage(
-            type=MessageType.ERROR,
-            content=f"❌ Sorry, I couldn't process that file. Please ensure it's a valid CSV or Excel file. Error: {type(e).__name__}",
-            metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
-        )
-        sessions[session_id]['messages'].append(error_msg.to_dict())
-        
-        return jsonify({
-            'success': False,
-            'message': error_msg.to_dict()
-        }), 500
+    except (pd.errors.EmptyDataError, pd.errors.ParserError, MemoryError, Exception) as e:
+        error_msg = handle_error(session_id, e, "file_upload")
+        status_code = 413 if isinstance(e, MemoryError) else 400
+        return jsonify({'success': False, 'message': error_msg}), status_code
 
 
 @app.route('/api/chat', methods=['POST'])
@@ -624,39 +622,9 @@ def chat():
         sessions[session_id]['messages'].append(final_error_msg.to_dict())
         return jsonify({'success': True, 'message': final_error_msg.to_dict()})
     
-    except KeyError as e:
-        logger.error(f"KeyError in chat: {e}")
-        error_msg = ChatMessage(
-            type=MessageType.ERROR,
-            content=f"Sorry, I couldn't find the required data. Please try uploading your file again.",
-            metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
-        )
-        sessions[session_id]['messages'].append(error_msg.to_dict())
-        return jsonify({'success': True, 'message': error_msg.to_dict()})
-    
-    except FileNotFoundError as e:
-        logger.error(f"File not found in chat: {e}")
-        error_msg = ChatMessage(
-            type=MessageType.ERROR,
-            content=f"Sorry, I couldn't find your uploaded file. Please try uploading again.",
-            metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
-        )
-        sessions[session_id]['messages'].append(error_msg.to_dict())
-        return jsonify({'success': True, 'message': error_msg.to_dict()})
-    
-    except Exception as e:
-        logger.error(f"Unexpected error in chat: {e}", exc_info=True)
-        error_msg = ChatMessage(
-            type=MessageType.ERROR,
-            content=f"Sorry, I encountered an unexpected error. Please try a simpler query or refresh the page.",
-            metadata={'timestamp': datetime.now(timezone.utc).isoformat(), 'error_type': type(e).__name__}
-        )
-        sessions[session_id]['messages'].append(error_msg.to_dict())
-        
-        return jsonify({
-            'success': True,
-            'message': error_msg.to_dict()
-        })
+    except (KeyError, FileNotFoundError, Exception) as e:
+        error_msg = handle_error(session_id, e, "chat_query")
+        return jsonify({'success': True, 'message': error_msg})
 
 
 @app.route('/api/session/<session_id>/messages', methods=['GET'])

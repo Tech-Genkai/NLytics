@@ -1,6 +1,10 @@
-# 🎉 NLytics - Project Complete!
+# 🎉 NLytics - Proof-of-Concept Complete!
 
-## ✅ All 9 Phases Delivered
+**Status**: Working proof-of-concept demonstrating AI-powered natural language to code generation pipeline.
+
+**Purpose**: Demonstrates the feasibility and architecture of conversational data analytics - not a production-grade product.
+
+## ✅ All 9 Pipeline Phases Implemented
 
 ### Phase 1: Foundation ✅
 - File upload (CSV, Excel)
@@ -207,24 +211,40 @@ NLytics/
 - ✅ Syntax validation
 - ✅ Code review before execution
 
-## 🎯 Future Enhancements
+## 🎯 Potential Extensions
 
-- Persistent storage (database integration)
-- User authentication and multi-user support
-- More visualization types (heatmaps, box plots)
-- Multi-file analysis
-- Scheduled reports
-- Collaboration features
-- Caching layer for common queries
-- Container-based execution for enhanced isolation
+**Current scope:** Local single-user analysis tool - intentionally minimal.
 
-## 👏 Project Status: **COMPLETE (MVP)**
+**Realistic extensions if needed:**
+- More visualization types (heatmaps, box plots, network graphs)
+- Multi-file comparison and merging
+- Export to different formats (PDF reports, LaTeX tables)
+- Custom function definitions for domain-specific analysis
+- Query templates and saved workflows
 
-All 9 phases delivered with core functionality demonstrated. The system successfully proves the concept of conversational analytics with AI-powered code generation.
+**NOT planned (by design):**
+- Database/persistence: Creates liability for sensitive data
+- Authentication: Unnecessary for local single-user tool
+- Caching: Query variations make it ineffective
+- Containers: Overkill for local development tool
 
-**Total Development**: Complete MVP conversational analytics platform with AI-powered code generation, validation, and safe execution.
+## 👏 Project Status: **PROOF-OF-CONCEPT COMPLETE**
 
-**Note**: This is a proof-of-concept suitable for demonstration and learning. Production deployment would require additional work: database integration, authentication, enhanced security, and scalability improvements.
+Working demonstration of AI-powered natural language to pandas code generation with secure sandboxed execution.
+
+**What this project is:**
+- Proof-of-concept validating the core idea
+- Educational demonstration of LLM-powered code generation
+- Working prototype for personal use and demos
+- Architecture blueprint for conversational analytics
+
+**What this project is NOT:**
+- Production-ready SaaS platform
+- Enterprise-grade software
+- Fully hardened security system
+- Scalable multi-user service
+
+**Design philosophy:** Minimal, focused proof-of-concept. Demonstrates the pipeline idea without unnecessary complexity.
 
 ---
 

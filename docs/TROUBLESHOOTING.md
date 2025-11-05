@@ -1,5 +1,7 @@
 # NLytics Troubleshooting Guide
 
+**Note**: NLytics is a proof-of-concept tool for demonstrating AI-powered code generation. These troubleshooting tips help you get it running for personal use and demos.
+
 ## Common Issues & Solutions
 
 ### 🚨 Installation Issues

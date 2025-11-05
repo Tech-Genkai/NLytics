@@ -156,12 +156,12 @@ class DataPreprocessor:
                     try:
                         # Try parsing a sample
                         sample = non_null.head(min(10, len(non_null)))
-                        parsed = pd.to_datetime(sample, errors='coerce')
+                        parsed = pd.to_datetime(sample, errors='coerce', format='mixed')
                         
                         # If most values parse successfully, convert the column
                         success_rate = parsed.notna().sum() / len(sample)
                         if success_rate > 0.8:
-                            df[col] = pd.to_datetime(df[col], errors='coerce')
+                            df[col] = pd.to_datetime(df[col], errors='coerce', format='mixed')
                             date_columns.append({
                                 'column': col,
                                 'format': 'parsed_from_string',

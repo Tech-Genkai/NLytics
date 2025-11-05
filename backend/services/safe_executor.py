@@ -62,41 +62,63 @@ class SafeExecutor:
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
         
-        # Restricted globals (only safe modules)
+        # Restricted globals - NO __import__, NO __builtins__ access
+        safe_builtins = {
+            'abs': abs,
+            'all': all,
+            'any': any,
+            'bool': bool,
+            'dict': dict,
+            'enumerate': enumerate,
+            'filter': filter,
+            'float': float,
+            'int': int,
+            'len': len,
+            'list': list,
+            'map': map,
+            'max': max,
+            'min': min,
+            'pow': pow,
+            'print': print,
+            'range': range,
+            'round': round,
+            'set': set,
+            'sorted': sorted,
+            'str': str,
+            'sum': sum,
+            'tuple': tuple,
+            'type': type,
+            'zip': zip,
+            # Explicitly block dangerous functions
+            '__import__': None,
+            '__builtins__': None,
+            'eval': None,
+            'exec': None,
+            'compile': None,
+            'open': None,
+            'input': None,
+            'getattr': None,
+            'setattr': None,
+            'delattr': None,
+            'hasattr': None,
+            'globals': None,
+            'locals': None,
+            'vars': None,
+            'dir': None,
+        }
+        
+        # Pre-import safe modules
         safe_globals = {
-            '__builtins__': {
-                'abs': abs,
-                'all': all,
-                'any': any,
-                'bool': bool,
-                'dict': dict,
-                'enumerate': enumerate,
-                'filter': filter,
-                'float': float,
-                'int': int,
-                'len': len,
-                'list': list,
-                'map': map,
-                'max': max,
-                'min': min,
-                'pow': pow,
-                'print': print,
-                'range': range,
-                'round': round,
-                'set': set,
-                'sorted': sorted,
-                'str': str,
-                'sum': sum,
-                'tuple': tuple,
-                'type': type,
-                'zip': zip,
-                '__import__': __import__,  # Required for pandas/numpy to work
-            },
+            '__builtins__': safe_builtins,
             'pd': pd,
             'np': np,
             'pandas': pd,
             'numpy': np,
-            'df': df.copy(),  # Give code a copy to prevent modification
+            'df': df.copy(),
+            # Block these too at global level
+            '__import__': None,
+            '__name__': '__main__',
+            '__doc__': None,
         }
         
         try:

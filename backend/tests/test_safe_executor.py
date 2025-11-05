@@ -29,10 +29,7 @@ class TestSafeExecutor:
     
     def test_execution_returns_result(self):
         """Test that result variable is captured"""
-        code = """
-import pandas as pd
-result = df['price'].sum()
-"""
+        code = "result = df['price'].sum()"
         result = self.executor.execute(code, self.test_df)
         
         assert result['success'] == True

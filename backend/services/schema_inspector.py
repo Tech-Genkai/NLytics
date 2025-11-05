@@ -69,7 +69,7 @@ class SchemaInspector:
         non_null = series.dropna()
         if len(non_null) > 0:
             try:
-                pd.to_datetime(non_null.head(10))
+                pd.to_datetime(non_null.head(10), format='mixed')
                 return 'date_string'
             except:
                 pass

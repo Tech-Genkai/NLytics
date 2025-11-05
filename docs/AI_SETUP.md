@@ -1,6 +1,8 @@
 # 🔑 Setting Up Your Groq API Key
 
-NLytics now uses **AI-powered query understanding** via Groq's Llama model! This means the system intelligently understands your questions by analyzing your actual dataset - no more annoying clarifications.
+**Note**: NLytics is a proof-of-concept demonstrating AI-powered natural language to code generation.
+
+NLytics uses **AI-powered query understanding** via Groq's Llama model. The system intelligently understands your questions by analyzing your actual dataset - no clarifications needed for most queries.
 
 ## Quick Setup (2 minutes)
 

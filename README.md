@@ -141,17 +141,18 @@ GROQ_API_KEY=your_groq_api_key_here
 
 ### Multi-Layer Validation
 1. **AST Parsing** - Syntax validation before execution
-2. **Blacklist Filtering** - Blocks eval, exec, open, os, sys, subprocess
+2. **Blacklist Filtering** - Blocks dangerous operations (eval, exec, getattr, open, os, sys, subprocess, globals, etc.)
 3. **Import Whitelist** - Only pandas and numpy permitted
 4. **Column Validation** - Schema-aware code generation
 5. **Timeout Enforcement** - 30-second execution limit
 
 ### Sandboxed Execution Environment
-- Restricted `__builtins__` (len, sum, max, min, abs, round, range)
+- Restricted `__builtins__` - Only safe functions available
+- Blocked introspection functions (getattr, setattr, globals, locals, vars, dir)
+- No `__import__` access to prevent import smuggling
 - No file system access
 - No network access
-- Memory limits enforced
-- Isolated subprocess execution
+- Isolated execution context
 
 ## Technical Stack
 
@@ -163,13 +164,6 @@ GROQ_API_KEY=your_groq_api_key_here
 | **Visualization** | Plotly 5.24.1, Chart.js (fallback) |
 | **Frontend** | Vanilla JavaScript, Marked.js |
 | **Testing** | pytest, automated integration tests (60+ scenarios) |
-
-## Performance
-
-- **Cold start**: ~19 seconds (first query with model initialization)
-- **Subsequent queries**: ~2.6 seconds average
-- **Success rate**: High success rate across diverse test scenarios
-- **Visualization generation**: Reliable Plotly chart generation with Chart.js fallback
 
 ## Testing
 
@@ -234,16 +228,48 @@ NLytics prioritizes transparency and education over abstraction:
 4. **Self-Correction** - Retry loops with structured feedback for robustness
 5. **Educational Value** - Learn data analysis by observing code generation
 
-## Limitations & Future Work
+## Design Decisions & Scope
 
-Current limitations:
-- **In-memory sessions**: Data is not persisted between server restarts
-- **Single-user**: No authentication or multi-user support
-- **Rate limits**: Dependent on Groq API free tier limits
-- **Dataset size**: Best performance with datasets under 100K rows
-- **Security**: Sandbox needs hardening for production deployment
+**Why no database?**
+- Users analyze sensitive data - storing it creates liability and security risks
+- Sessions expire on restart by design - no data retention, no privacy concerns
+- This is an analysis tool, not a data warehouse
+- Stateless architecture works for Render/cloud deployment
 
-Future enhancements: Database integration, user authentication, caching, container-based execution, monitoring, CI/CD pipeline.
+**Why no authentication?**
+- Single-user tool - you control access via URL sharing (or lack thereof)
+- For public deployment: Render provides basic auth at platform level
+- Adding app-level auth is overkill for personal/demo usage
+- If you need real auth, add it when you actually have multiple real users
+
+**Why no caching?**
+- Queries are rarely identical (different datasets, query variations)
+- Groq API responses are fast (~5s average)
+- Cache invalidation complexity outweighs benefits for ad-hoc analysis
+
+**Why no Docker?**
+- Local development tool for single users
+- Python virtual environment is simpler and sufficient
+- Docker adds deployment complexity with no benefit for local usage
+
+**Current scope:**
+- **Single-user tool**: Runs locally or on Render for personal/demo usage
+- **Session-based**: Analyze, get results, close - no persistence by design
+- **API-dependent**: Requires Groq API key and internet connection
+- **Dataset limits**: Optimized for datasets under 100K rows
+- **Stateless**: Works on cloud platforms (Render, Fly.io, Railway) without modifications
+
+**Deployment notes:**
+- Render/cloud deployment works out of the box (stateless sessions are fine)
+- Use Render's environment variables for `GROQ_API_KEY`
+- Use Render's basic auth if you want to restrict access
+- In-memory sessions reset on dyno restart - acceptable for demo/personal use
+
+**If you actually need:**
+- **Real multi-user SaaS**: Add database, proper auth, rate limiting, billing
+- **Enterprise**: Add SSO, audit logs, compliance, SLAs
+
+This tool is intentionally minimal - works for local dev and simple cloud deployment.
 
 ## System Requirements
 

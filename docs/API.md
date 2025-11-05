@@ -2,15 +2,17 @@
 
 ## Overview
 
-NLytics provides a comprehensive REST API for programmatic access to all analytics functionality. The API enables you to upload datasets, execute natural language queries, get generated code, visualizations, and insights.
+NLytics provides a REST API for programmatic access to analytics functionality. This is a **proof-of-concept API** demonstrating AI-powered natural language to pandas code generation.
 
-**Base URL**: `http://localhost:5000/api/v1`
+**Base URL**: `http://localhost:5000/api/v1` (or your deployed URL)
 
 **Version**: 1.0.0
 
+**Status**: Proof-of-concept - suitable for demos, personal use, and experimentation
+
 ## Authentication
 
-Currently no authentication required (add API keys in production).
+No authentication in current version. For personal/demo use, access control is managed at the deployment level (Render basic auth, network restrictions, etc.).
 
 ## Endpoints
 
@@ -377,7 +379,16 @@ if (data.visualization && data.visualization.suitable) {
 
 ## Rate Limits
 
-No rate limits in current version. Add rate limiting for production deployment.
+No rate limits in current version. This is a proof-of-concept tool - add rate limiting if deploying for production use.
+
+## Project Scope
+
+**Note**: This API is part of a proof-of-concept demonstrating AI-powered natural language to code generation. It's designed for:
+- Personal analysis and demos
+- Educational purposes
+- Prototyping and experimentation
+
+Not intended as production-grade SaaS without additional security, scaling, and monitoring infrastructure.
 
 ## Support
 
