@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 import os
 import uuid
 import numpy as np
+import pandas as pd
 import json
 import logging
 from datetime import datetime, timezone
@@ -242,14 +243,43 @@ def upload_file():
             'dataset_id': file_id
         })
         
+    except pd.errors.EmptyDataError:
+        logger.error("Empty file uploaded")
+        error_msg = ChatMessage(
+            type=MessageType.ERROR,
+            content=f"❌ The file appears to be empty. Please upload a valid CSV or Excel file with data.",
+            metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
+        )
+        sessions[session_id]['messages'].append(error_msg.to_dict())
+        return jsonify({'success': False, 'message': error_msg.to_dict()}), 400
+    
+    except pd.errors.ParserError as e:
+        logger.error(f"File parsing error: {e}")
+        error_msg = ChatMessage(
+            type=MessageType.ERROR,
+            content=f"❌ I couldn't parse this file. Please ensure it's a valid CSV or Excel file with proper formatting.",
+            metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
+        )
+        sessions[session_id]['messages'].append(error_msg.to_dict())
+        return jsonify({'success': False, 'message': error_msg.to_dict()}), 400
+    
+    except MemoryError:
+        logger.error("File too large - memory error")
+        error_msg = ChatMessage(
+            type=MessageType.ERROR,
+            content=f"❌ This file is too large to process. Please try a smaller dataset (under 100K rows).",
+            metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
+        )
+        sessions[session_id]['messages'].append(error_msg.to_dict())
+        return jsonify({'success': False, 'message': error_msg.to_dict()}), 413
+    
     except Exception as e:
         import traceback
-        print(f"❌ ERROR in upload: {str(e)}")
-        print(traceback.format_exc())
+        logger.error(f"Upload error: {str(e)}", exc_info=True)
         
         error_msg = ChatMessage(
             type=MessageType.ERROR,
-            content=f"❌ Sorry, I couldn't process that file. Error: {str(e)}",
+            content=f"❌ Sorry, I couldn't process that file. Please ensure it's a valid CSV or Excel file. Error: {type(e).__name__}",
             metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
         )
         sessions[session_id]['messages'].append(error_msg.to_dict())
@@ -263,15 +293,22 @@ def upload_file():
 @app.route('/api/chat', methods=['POST'])
 def chat():
     """Handle user chat messages"""
-    data = request.get_json()
-    session_id = data.get('session_id')
-    user_message = data.get('message', '').strip()
-    
-    if not session_id or session_id not in sessions:
-        return jsonify({'error': 'Invalid session'}), 400
-    
-    if not user_message:
-        return jsonify({'error': 'Message cannot be empty'}), 400
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Invalid request body'}), 400
+            
+        session_id = data.get('session_id')
+        user_message = data.get('message', '').strip()
+        
+        if not session_id or session_id not in sessions:
+            return jsonify({'error': 'Invalid or expired session. Please refresh the page.'}), 400
+        
+        if not user_message:
+            return jsonify({'error': 'Message cannot be empty'}), 400
+    except Exception as e:
+        logger.error(f"Error parsing chat request: {e}")
+        return jsonify({'error': 'Invalid request format'}), 400
     
     # Store user message
     user_msg = ChatMessage(
@@ -587,11 +624,32 @@ def chat():
         sessions[session_id]['messages'].append(final_error_msg.to_dict())
         return jsonify({'success': True, 'message': final_error_msg.to_dict()})
     
-    except Exception as e:
+    except KeyError as e:
+        logger.error(f"KeyError in chat: {e}")
         error_msg = ChatMessage(
             type=MessageType.ERROR,
-            content=f"Sorry, I encountered an error: {str(e)}",
+            content=f"Sorry, I couldn't find the required data. Please try uploading your file again.",
             metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
+        )
+        sessions[session_id]['messages'].append(error_msg.to_dict())
+        return jsonify({'success': True, 'message': error_msg.to_dict()})
+    
+    except FileNotFoundError as e:
+        logger.error(f"File not found in chat: {e}")
+        error_msg = ChatMessage(
+            type=MessageType.ERROR,
+            content=f"Sorry, I couldn't find your uploaded file. Please try uploading again.",
+            metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
+        )
+        sessions[session_id]['messages'].append(error_msg.to_dict())
+        return jsonify({'success': True, 'message': error_msg.to_dict()})
+    
+    except Exception as e:
+        logger.error(f"Unexpected error in chat: {e}", exc_info=True)
+        error_msg = ChatMessage(
+            type=MessageType.ERROR,
+            content=f"Sorry, I encountered an unexpected error. Please try a simpler query or refresh the page.",
+            metadata={'timestamp': datetime.now(timezone.utc).isoformat(), 'error_type': type(e).__name__}
         )
         sessions[session_id]['messages'].append(error_msg.to_dict())
         

@@ -5,8 +5,27 @@ Comprehensive API for programmatic access to all analytics functionality
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timezone
 import logging
+import pandas as pd
+import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+def serialize_result(result):
+    """Convert result to JSON-serializable format"""
+    if isinstance(result, pd.DataFrame):
+        return result.to_dict('records')
+    elif isinstance(result, pd.Series):
+        return result.to_dict()
+    elif isinstance(result, (np.integer, np.int64, np.int32)):
+        return int(result)
+    elif isinstance(result, (np.floating, np.float64, np.float32)):
+        return float(result)
+    elif isinstance(result, np.ndarray):
+        return result.tolist()
+    elif isinstance(result, np.bool_):
+        return bool(result)
+    return result
 
 # This will be initialized from main.py with all the service instances
 api_blueprint = Blueprint('api', __name__, url_prefix='/api/v1')
@@ -97,16 +116,23 @@ def analyze():
         # Create temporary session for this request
         session_id = f"api_{datetime.now().timestamp()}"
         
-        # Upload and process file
-        upload_result = services['file_handler'].save_file(file)
-        if not upload_result['success']:
-            return jsonify({'error': upload_result['error']}), 400
+        # Upload and process file (same logic as main.py upload)
+        import uuid
+        from werkzeug.utils import secure_filename
+        import os
         
-        df = services['file_handler'].load_file(upload_result['path'])
+        filename = secure_filename(file.filename)
+        file_id = str(uuid.uuid4())
+        upload_folder = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'uploads')
+        os.makedirs(upload_folder, exist_ok=True)
+        
+        file_path = os.path.join(upload_folder, f"{file_id}_{filename}")
+        file.save(file_path)
+        
+        df = services['file_handler'].load_file(file_path)
         
         # Preprocess
-        processed = services['preprocessor'].preprocess(df)
-        processed_df = processed['data']
+        processed_df, preprocessing_manifest = services['preprocessor'].preprocess(df, filename)
         
         # Detect intent
         intent_result = services['intent_detector'].detect_intent(
@@ -138,19 +164,19 @@ def analyze():
         )
         
         # Validate
-        validation_result = services['code_validator'].validate_code(
+        validation_result = services['code_validator'].validate(
             code_result['code'],
             processed_df.columns.tolist()
         )
         
-        if not validation_result['is_valid']:
+        if not validation_result['valid']:
             return jsonify({
                 'error': 'Code validation failed',
                 'details': validation_result.get('errors', [])
             }), 500
         
         # Execute
-        execution_result = services['safe_executor'].execute_code(
+        execution_result = services['safe_executor'].execute(
             code_result['code'],
             processed_df
         )
@@ -169,11 +195,14 @@ def analyze():
         )
         
         # Synthesize answer
+        query_context = {
+            'refined_query': query_to_use if refinement.get('refinement_applied') else None,
+            'execution_time': execution_result.get('execution_time', 0)
+        }
         answer = services['answer_synthesizer'].synthesize_answer(
             query_to_use,
             execution_result['result'],
-            insights,
-            code_result['code']
+            query_context
         )
         
         # Build response
@@ -189,7 +218,7 @@ def analyze():
                 }
             },
             'result': {
-                'data': services['safe_executor']._serialize_result(execution_result['result']),
+                'data': serialize_result(execution_result['result']),
                 'type': str(type(execution_result['result']).__name__)
             },
             'insights': {
@@ -278,18 +307,18 @@ def query_endpoint():
             df_dtypes
         )
         
-        validation_result = services['code_validator'].validate_code(
+        validation_result = services['code_validator'].validate(
             code_result['code'],
             df.columns.tolist()
         )
         
-        if not validation_result['is_valid']:
+        if not validation_result['valid']:
             return jsonify({
                 'error': 'Code validation failed',
                 'details': validation_result.get('errors', [])
             }), 500
         
-        execution_result = services['safe_executor'].execute_code(code_result['code'], df)
+        execution_result = services['safe_executor'].execute(code_result['code'], df)
         
         if not execution_result['success']:
             return jsonify({
@@ -303,11 +332,14 @@ def query_endpoint():
             execution_result.get('execution_time', 0)
         )
         
+        query_context = {
+            'refined_query': query_to_use if refinement.get('refinement_applied') else None,
+            'execution_time': execution_result.get('execution_time', 0)
+        }
         answer = services['answer_synthesizer'].synthesize_answer(
             query_to_use,
             execution_result['result'],
-            insights,
-            code_result['code']
+            query_context
         )
         
         response = {
@@ -329,7 +361,7 @@ def query_endpoint():
                 'execution_time': execution_result.get('execution_time', 0)
             },
             'result': {
-                'data': services['safe_executor']._serialize_result(execution_result['result']),
+                'data': serialize_result(execution_result['result']),
                 'type': str(type(execution_result['result']).__name__)
             },
             'visualization': insights.get('visualization'),
@@ -419,7 +451,7 @@ def validate_code():
         if not code:
             return jsonify({'error': 'Code is required'}), 400
         
-        validation_result = services['code_validator'].validate_code(code, columns)
+        validation_result = services['code_validator'].validate(code, columns)
         
         return jsonify(validation_result), 200
         
@@ -466,15 +498,15 @@ def execute_code():
         df = services['file_handler'].load_file(processed_path)
         
         # Validate first
-        validation_result = services['code_validator'].validate_code(code, df.columns.tolist())
-        if not validation_result['is_valid']:
+        validation_result = services['code_validator'].validate(code, df.columns.tolist())
+        if not validation_result['valid']:
             return jsonify({
                 'error': 'Code validation failed',
                 'details': validation_result
             }), 400
         
         # Execute
-        execution_result = services['safe_executor'].execute_code(code, df)
+        execution_result = services['safe_executor'].execute(code, df)
         
         if not execution_result['success']:
             return jsonify({
@@ -484,7 +516,7 @@ def execute_code():
         
         return jsonify({
             'success': True,
-            'result': services['safe_executor']._serialize_result(execution_result['result']),
+            'result': serialize_result(execution_result['result']),
             'execution_time': execution_result.get('execution_time', 0)
         }), 200
         

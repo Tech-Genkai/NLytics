@@ -20,11 +20,11 @@ NLytics employs a 9-phase AI pipeline that transforms conversational queries int
 
 ## Key Features
 
-- **Production-Grade Code Generation** - Real pandas/Python code, not API wrappers
+- **Real Code Generation** - Generates actual pandas/Python code, not API wrappers
 - **Self-Correcting Pipeline** - Automatic retry loops with structured feedback (3 attempts)
-- **Enterprise Security** - Multi-layer validation with sandboxed execution environment
+- **Multi-Layer Security** - AST parsing, blacklist filtering, and sandboxed execution
 - **Context-Aware Intelligence** - Schema analysis and column-aware code generation
-- **Visual Analytics** - Chart.js integration with automatic chart type selection
+- **Interactive Visualizations** - Plotly charts with zoom, pan, and hover tooltips
 - **Transparent Execution** - View generated code before execution
 
 ## Quick Start
@@ -40,7 +40,10 @@ NLytics employs a 9-phase AI pipeline that transforms conversational queries int
 git clone https://github.com/Tech-Genkai/NLytics.git
 cd NLytics
 
-# Configure environment
+# Configure environment (create .env file)
+# Windows PowerShell:
+Set-Content -Path .env -Value "GROQ_API_KEY=your_api_key_here"
+# Linux/Mac:
 echo "GROQ_API_KEY=your_api_key_here" > .env
 
 # Install dependencies
@@ -76,37 +79,45 @@ General analytics patterns:
 ```
 NLytics/
 ├── backend/
-│   ├── main.py                     # Flask application core
-│   ├── config.py                   # Configuration management
-│   ├── services/                   # AI pipeline services
-│   │   ├── ai_intent_detector.py   # Natural language understanding
-│   │   ├── query_refiner.py        # Semantic query optimization
-│   │   ├── query_planner.py        # Multi-step execution planning
-│   │   ├── code_generator.py       # LLM-powered code synthesis
-│   │   ├── code_validator.py       # Security validation layer
-│   │   ├── safe_executor.py        # Sandboxed execution environment
-│   │   ├── insight_generator.py    # Statistical analysis & visualization
-│   │   ├── answer_synthesizer.py   # Natural language generation
-│   │   ├── preprocessor.py         # Data cleaning & normalization
-│   │   ├── schema_inspector.py     # Column type detection
-│   │   └── file_handler.py         # CSV/Excel operations
+│   ├── main.py                         # Flask application core
+│   ├── config.py                       # Configuration management
+│   ├── requirements.txt                # Python dependencies
+│   ├── api/
+│   │   └── analytics_api.py            # REST API endpoints
+│   ├── services/                       # AI pipeline services
+│   │   ├── ai_intent_detector.py       # Natural language understanding
+│   │   ├── query_refiner.py            # Semantic query optimization
+│   │   ├── query_planner.py            # Multi-step execution planning
+│   │   ├── code_generator.py           # LLM-powered code synthesis
+│   │   ├── code_validator.py           # Security validation layer
+│   │   ├── safe_executor.py            # Sandboxed execution environment
+│   │   ├── insight_generator.py        # Statistical analysis & visualization
+│   │   ├── answer_synthesizer.py       # Natural language generation
+│   │   ├── preprocessor.py             # Data cleaning & normalization
+│   │   ├── schema_inspector.py         # Column type detection
+│   │   └── file_handler.py             # CSV/Excel operations
 │   ├── models/
-│   │   └── chat_message.py         # Message type definitions
-│   └── tests/
-│       ├── automated_test.py       # Comprehensive test suite (60+ prompts)
-│       └── test_schema_inspector.py
+│   │   └── chat_message.py             # Message type definitions
+│   ├── tests/
+│   │   ├── automated_test.py           # Integration test suite (60+ scenarios)
+│   │   ├── test_api.py                 # API endpoint tests
+│   │   ├── test_code_validator.py      # Code validation tests
+│   │   ├── test_insight_generator.py   # Insight generation tests
+│   │   ├── test_safe_executor.py       # Safe execution tests
+│   │   └── test_schema_inspector.py    # Schema inspection tests
+│   └── utils/                          # Utility modules
 ├── frontend/
-│   ├── index.html                  # Chat-based interface
+│   ├── index.html                      # Chat-based interface
 │   └── static/
-│       ├── js/app.js                # Client-side logic
-│       └── css/style.css            # UI styling
+│       ├── js/app.js                   # Client-side logic
+│       └── css/style.css               # UI styling
 ├── data/
-│   ├── uploads/                    # User-uploaded datasets
-│   └── processed/                  # Preprocessed cache
-├── samples/                         # Example datasets
-├── docs/                            # Technical documentation
-├── .env                             # Environment configuration
-└── start.py                         # Application entry point
+│   ├── uploads/                        # User-uploaded datasets
+│   └── processed/                      # Preprocessed cache
+├── samples/                             # Example datasets
+├── docs/                                # Technical documentation
+├── .env                                 # Environment configuration
+└── start.py                             # Application entry point
 ```
 
 ## Configuration
@@ -149,43 +160,50 @@ GROQ_API_KEY=your_groq_api_key_here
 | **AI Model** | Groq Llama 3.3-70B (70B parameter model) |
 | **Backend** | Flask 3.1.0, Python 3.9+ |
 | **Data Processing** | pandas 2.2.3, numpy 2.2.4 |
-| **Frontend** | Vanilla JavaScript, Chart.js, Marked.js |
-| **Testing** | pytest, automated test suite (60+ scenarios) |
+| **Visualization** | Plotly 5.24.1, Chart.js (fallback) |
+| **Frontend** | Vanilla JavaScript, Marked.js |
+| **Testing** | pytest, automated integration tests (60+ scenarios) |
 
 ## Performance
 
 - **Cold start**: ~19 seconds (first query with model initialization)
 - **Subsequent queries**: ~2.6 seconds average
-- **Success rate**: 100% (validated across 20 diverse test scenarios)
-- **Visualization generation**: 100% success rate after warmup
+- **Success rate**: High success rate across diverse test scenarios
+- **Visualization generation**: Reliable Plotly chart generation with Chart.js fallback
 
 ## Testing
 
-Run the automated test suite:
+Run the test suite:
 ```bash
-# Quick test (1 query per category)
-python backend/tests/automated_test.py --quick
+# All unit tests
+python -m pytest backend/tests/ -v
 
-# Full suite (60+ queries)
+# With coverage report
+python -m pytest backend/tests/ --cov=backend/services --cov-report=html
+
+# Automated integration tests (60+ scenarios)
 python backend/tests/automated_test.py
 
-# Specific categories
-python backend/tests/automated_test.py --categories "Basic Aggregations" "Complex Queries"
+# Quick integration test
+python backend/tests/automated_test.py --quick
 ```
 
-Test categories include: Basic Aggregations, Growth & Performance, Sector Analysis, Complex Queries, Statistical Insights, Rankings, Investment Screening, Natural Language, Edge Cases.
+**Test Coverage:**
+- Code validation (syntax, security, imports)
+- Safe execution (error handling, result capture, isolation)
+- Insight generation (DataFrames, scalar values, visualizations)
+- Schema inspection (column types, statistics)
+- Integration tests covering 9 categories: Basic Aggregations, Growth & Performance, Sector Analysis, Complex Queries, Statistical Insights, Rankings, Investment Screening, Natural Language, Edge Cases
 
 ## REST API
 
-NLytics provides a comprehensive REST API for programmatic access:
+NLytics provides a REST API for programmatic access:
 
 ```bash
 # Complete analysis in one call
 curl -X POST http://localhost:5000/api/v1/analyze \
   -F "file=@data.csv" \
   -F "query=highest stock by volume"
-
-# Response includes: code, result, visualization, insights, answer
 ```
 
 **Available Endpoints:**
@@ -194,6 +212,8 @@ curl -X POST http://localhost:5000/api/v1/analyze \
 - `GET /api/v1/status/<session_id>` - Get session status
 - `POST /api/v1/code/validate` - Validate code
 - `POST /api/v1/code/execute` - Execute code
+
+Response includes generated code, execution results, Plotly/Chart.js visualization config, narrative insights, and plain-language answer.
 
 See `docs/API.md` for complete API documentation with examples.
 
@@ -214,6 +234,17 @@ NLytics prioritizes transparency and education over abstraction:
 4. **Self-Correction** - Retry loops with structured feedback for robustness
 5. **Educational Value** - Learn data analysis by observing code generation
 
+## Limitations & Future Work
+
+Current limitations:
+- **In-memory sessions**: Data is not persisted between server restarts
+- **Single-user**: No authentication or multi-user support
+- **Rate limits**: Dependent on Groq API free tier limits
+- **Dataset size**: Best performance with datasets under 100K rows
+- **Security**: Sandbox needs hardening for production deployment
+
+Future enhancements: Database integration, user authentication, caching, container-based execution, monitoring, CI/CD pipeline.
+
 ## System Requirements
 
 - Python 3.9 or higher
@@ -227,4 +258,4 @@ MIT License
 
 ---
 
-**Production-ready natural language analytics engine. Built for data professionals who need rapid insights without sacrificing code transparency.**
+**Proof-of-concept natural language analytics engine. Demonstrates AI-powered code generation for data analysis with transparent execution.**

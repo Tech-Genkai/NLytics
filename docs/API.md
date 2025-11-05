@@ -213,13 +213,14 @@ curl -X POST http://localhost:5000/api/v1/code/execute \
 
 ## Visualization Configuration
 
-When `return_visualization=true`, the API returns chart configuration with colorful palette:
+When `return_visualization=true`, the API returns Plotly chart configuration (with Chart.js fallback):
 
 ### Bar Chart
 ```json
 {
   "type": "bar",
   "suitable": true,
+  "plotly": "{\"data\": [...], \"layout\": {...}}",
   "x_values": ["A", "B", "C"],
   "y_values": [10, 20, 15],
   "colors": ["#3b82f6", "#10b981", "#f59e0b"],
@@ -232,22 +233,14 @@ When `return_visualization=true`, the API returns chart configuration with color
 {
   "type": "scatter",
   "suitable": true,
+  "plotly": "{\"data\": [...], \"layout\": {...}}",
   "x_values": [1, 2, 3],
   "y_values": [10, 20, 15],
   "point_color": "#3b82f6"
 }
 ```
 
-### Line Chart
-```json
-{
-  "type": "line",
-  "suitable": true,
-  "x_values": ["Jan", "Feb", "Mar"],
-  "y_values": [100, 150, 120],
-  "line_color": "#3b82f6"
-}
-```
+The `plotly` field contains a JSON string with Plotly figure data for interactive charts. The `x_values`, `y_values`, and `colors` fields provide fallback data for Chart.js rendering.
 
 ## Color Palette
 

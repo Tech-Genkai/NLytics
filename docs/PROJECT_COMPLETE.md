@@ -54,7 +54,8 @@
 ### Phase 8: Insight Studio ✅
 - Narrative summary generation
 - Key findings extraction
-- Visualization suggestions (bar, scatter, histogram, line)
+- Interactive Plotly visualizations (bar, scatter plots)
+- Chart.js fallback for compatibility
 - Next steps recommendations
 - Export options (CSV, Excel, JSON)
 
@@ -111,18 +112,18 @@ Query Planning (Multi-step decomposition)
 Code Generation (Pandas/Python)
     ↓
 Validation (Security, Syntax, Logic)
-    ↓
+    ↓  [Retry loop with feedback on failure - 3 attempts]
 Safe Execution (Sandboxed, Timeout, Limits)
     ↓
-Results + Insights (Narrative, Viz, Export)
+Results + Insights (Narrative, Plotly/Chart.js viz, Export)
 ```
 
 ## 📝 Example Queries Handled
 
-- "highest growing stock" → Generates code to calculate growth, sorts, returns top results
-- "average price by sector" → Groups by sector, aggregates, formats results
+- "highest growing stock" → Calculates growth rates, sorts, returns top 10 with interactive bar chart
+- "average price by sector" → Groups by sector, aggregates, displays results with Plotly visualization
 - "show outliers in sales data" → Calculates IQR, filters outliers, explains findings
-- "compare Q1 vs Q2 revenue" → Filters by date, calculates metrics, shows comparison
+- "correlation between volume and price" → Generates scatter plot with statistical correlation analysis
 
 ## 🎯 What Makes This Special
 
@@ -206,20 +207,24 @@ NLytics/
 - ✅ Syntax validation
 - ✅ Code review before execution
 
-## 🎯 Future Enhancements (Optional)
+## 🎯 Future Enhancements
 
 - Persistent storage (database integration)
-- More visualization types (interactive Plotly charts)
+- User authentication and multi-user support
+- More visualization types (heatmaps, box plots)
 - Multi-file analysis
 - Scheduled reports
 - Collaboration features
-- Model fine-tuning on domain-specific data
+- Caching layer for common queries
+- Container-based execution for enhanced isolation
 
-## 👏 Project Status: **COMPLETE**
+## 👏 Project Status: **COMPLETE (MVP)**
 
-All 9 phases delivered with full functionality. The system is production-ready for deployment!
+All 9 phases delivered with core functionality demonstrated. The system successfully proves the concept of conversational analytics with AI-powered code generation.
 
-**Total Development**: Complete conversational analytics platform with AI-powered code generation, validation, and safe execution.
+**Total Development**: Complete MVP conversational analytics platform with AI-powered code generation, validation, and safe execution.
+
+**Note**: This is a proof-of-concept suitable for demonstration and learning. Production deployment would require additional work: database integration, authentication, enhanced security, and scalability improvements.
 
 ---
 

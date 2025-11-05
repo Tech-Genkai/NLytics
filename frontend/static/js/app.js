@@ -10,6 +10,7 @@ class NLyticsApp {
         
         // DOM elements
         this.messagesList = document.getElementById('messages');
+        this.chatContainer = document.querySelector('.chat-container');
         this.userInput = document.getElementById('user-input');
         this.sendBtn = document.getElementById('send-btn');
         this.uploadBtn = document.getElementById('upload-btn');
@@ -212,7 +213,7 @@ class NLyticsApp {
             if (visualizationHtml) {
                 this.messagesList.appendChild(messageEl);
                 this.initializeChart(messageEl, message.metadata);
-                this.scrollToBottom();
+                // Don't scroll here - let initializeChart handle it after render
                 return;
             }
         }
@@ -316,13 +317,15 @@ class NLyticsApp {
         const viz = metadata.insights.visualization;
         if (!viz.suitable || !viz.type) return '';
         
-        // Generate unique ID for chart canvas
+        // Generate unique ID for chart
         const chartId = `chart-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Use div if Plotly data available, canvas for Chart.js
+        const chartElement = viz.plotly ? 'div' : 'canvas';
         
         return `
             <div class="visualization-container">
-                <div class="viz-header">📊 ${viz.description || 'Visualization'}</div>
-                <canvas id="${chartId}" data-chart-config='${JSON.stringify(viz)}'></canvas>
+                <${chartElement} id="${chartId}" data-chart-config='${JSON.stringify(viz)}'></${chartElement}>
             </div>
         `;
     }
@@ -330,13 +333,73 @@ class NLyticsApp {
     initializeChart(messageEl, metadata) {
         if (!metadata || !metadata.insights || !metadata.insights.visualization) return;
         
-        const canvas = messageEl.querySelector('canvas[data-chart-config]');
-        if (!canvas) return;
+        // Look for either canvas or div with chart config
+        const chartElement = messageEl.querySelector('[data-chart-config]');
+        if (!chartElement) {
+            console.warn('Chart element not found');
+            return;
+        }
         
-        const viz = JSON.parse(canvas.dataset.chartConfig);
+        const viz = JSON.parse(chartElement.dataset.chartConfig);
+        console.log('Initializing chart:', viz.type, 'Has Plotly data:', !!viz.plotly);
+        
+        // Try Plotly first if available
+        if (viz.plotly && typeof Plotly !== 'undefined') {
+            try {
+                console.log('Attempting Plotly render...');
+                const plotlyData = JSON.parse(viz.plotly);
+                console.log('Plotly data parsed:', plotlyData);
+                
+                // Ensure element is a div for Plotly
+                let plotlyDiv = chartElement;
+                if (chartElement.tagName === 'CANVAS') {
+                    console.log('Converting canvas to div for Plotly');
+                    plotlyDiv = document.createElement('div');
+                    plotlyDiv.id = chartElement.id;
+                    chartElement.parentNode.replaceChild(plotlyDiv, chartElement);
+                }
+                
+                plotlyDiv.style.width = '100%';
+                plotlyDiv.style.height = '450px';
+                
+                console.log('Calling Plotly.newPlot on:', plotlyDiv.id);
+                Plotly.newPlot(plotlyDiv.id, plotlyData.data, plotlyData.layout, {
+                    responsive: true,
+                    displayModeBar: true,
+                    displaylogo: false
+                }).then(() => {
+                    console.log('✅ Plotly chart rendered successfully');
+                    setTimeout(() => this.scrollToBottom(), 200);
+                    setTimeout(() => this.scrollToBottom(), 500);
+                }).catch(err => {
+                    console.error('❌ Plotly.newPlot failed:', err);
+                });
+                
+                return;
+            } catch (e) {
+                console.error('❌ Plotly rendering failed, falling back to Chart.js:', e);
+            }
+        } else {
+            if (!viz.plotly) console.log('No Plotly data in viz object');
+            if (typeof Plotly === 'undefined') console.warn('Plotly library not loaded');
+        }
+        
+        // Fallback to Chart.js - need canvas element
+        let canvas = chartElement;
+        if (chartElement.tagName === 'DIV') {
+            // Convert div to canvas for Chart.js
+            canvas = document.createElement('canvas');
+            canvas.id = chartElement.id;
+            canvas.dataset.chartConfig = chartElement.dataset.chartConfig;
+            chartElement.parentNode.replaceChild(canvas, chartElement);
+        }
+        
+        if (!canvas || canvas.tagName !== 'CANVAS') {
+            console.warn('Chart.js requires canvas element');
+            return;
+        }
+        
         const ctx = canvas.getContext('2d');
-        
-        // Extract data from result (if available in metadata)
         const chartData = this.prepareChartData(viz, metadata);
         
         if (chartData && typeof Chart !== 'undefined') {
@@ -348,16 +411,38 @@ class NLyticsApp {
                     maintainAspectRatio: true,
                     plugins: {
                         legend: {
-                            display: true,
-                            position: 'top'
+                            display: false  // Hide legend since all bars have same label
                         },
                         title: {
                             display: !!viz.description,
-                            text: viz.description || ''
+                            text: viz.description || '',
+                            font: {
+                                size: 16,
+                                weight: 'bold'
+                            },
+                            padding: 20
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: !!viz.y_label,
+                                text: viz.y_label || ''
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: !!viz.x_column,
+                                text: viz.x_column || ''
+                            }
                         }
                     }
                 }
             });
+            
+            setTimeout(() => this.scrollToBottom(), 200);
+            setTimeout(() => this.scrollToBottom(), 500);
         }
     }
     
@@ -482,14 +567,9 @@ class NLyticsApp {
     }
     
     scrollToBottom() {
-        // Force smooth scroll to bottom
-        requestAnimationFrame(() => {
-            this.messagesList.scrollTop = this.messagesList.scrollHeight;
-            // Double-check after images/charts load
-            setTimeout(() => {
-                this.messagesList.scrollTop = this.messagesList.scrollHeight;
-            }, 300);
-        });
+        if (this.chatContainer) {
+            this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+        }
     }
 }
 

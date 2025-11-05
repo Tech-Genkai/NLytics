@@ -1,11 +1,13 @@
 """
 Visualization and Insight Generation
-Creates charts and narrative summaries
+Creates charts and narrative summaries with Plotly support
 Phase 8: Insight Studio
 """
 import pandas as pd
 import json
 from typing import Dict, List, Any, Optional
+import plotly.graph_objects as go
+import plotly.express as px
 
 
 class InsightGenerator:
@@ -199,6 +201,15 @@ class InsightGenerator:
             # Get colorful palette
             colors = self._get_color_palette(len(top_data))
             
+            # Generate Plotly chart
+            plotly_json = self._create_plotly_bar(
+                top_data[cat_col].tolist(),
+                top_data[num_col].tolist(),
+                colors,
+                metric_explanation,
+                cat_col
+            )
+            
             return {
                 'type': 'bar',
                 'suitable': True,
@@ -208,7 +219,8 @@ class InsightGenerator:
                 'y_values': top_data[num_col].tolist(),
                 'colors': colors,
                 'description': f"{metric_explanation} by {cat_col}",
-                'y_label': metric_explanation
+                'y_label': metric_explanation,
+                'plotly': plotly_json  # Plotly chart data
             }
         elif len(numeric_cols) >= 2:
             # Multiple numerics = scatter or line
@@ -218,6 +230,14 @@ class InsightGenerator:
             # Sample data if too large
             sample_df = df.sample(min(50, len(df)))
             
+            # Generate Plotly scatter chart
+            plotly_json = self._create_plotly_scatter(
+                sample_df[x_col].tolist(),
+                sample_df[y_col].tolist(),
+                x_col,
+                y_col
+            )
+            
             return {
                 'type': 'scatter',
                 'suitable': True,
@@ -226,7 +246,8 @@ class InsightGenerator:
                 'x_values': sample_df[x_col].tolist(),
                 'y_values': sample_df[y_col].tolist(),
                 'point_color': '#3b82f6',
-                'description': f"Scatter plot of {y_col} vs {x_col}"
+                'description': f"Scatter plot of {y_col} vs {x_col}",
+                'plotly': plotly_json
             }
         elif len(numeric_cols) == 1:
             # Single numeric = histogram (bin the data)
@@ -252,6 +273,78 @@ class InsightGenerator:
             }
         
         return {'type': 'table', 'suitable': True}
+    
+    def _create_plotly_bar(self, x_values, y_values, colors, y_label, x_label):
+        """Create Plotly bar chart as JSON"""
+        try:
+            fig = go.Figure(data=[
+                go.Bar(
+                    x=x_values,
+                    y=y_values,
+                    marker=dict(
+                        color=colors,
+                        line=dict(color='rgba(0,0,0,0.2)', width=1)
+                    ),
+                    text=y_values,
+                    texttemplate='%{text:.2f}',
+                    textposition='outside'
+                )
+            ])
+            
+            fig.update_layout(
+                title=dict(text=f"{y_label} by {x_label}", font=dict(size=16)),
+                xaxis_title=x_label,
+                yaxis_title=y_label,
+                showlegend=False,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(family="Arial, sans-serif", size=12),
+                margin=dict(l=50, r=50, t=80, b=50),
+                height=400
+            )
+            
+            fig.update_xaxes(showgrid=False)
+            fig.update_yaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+            
+            return fig.to_json()
+        except Exception as e:
+            print(f"⚠️ Plotly chart generation failed: {e}")
+            return None
+    
+    def _create_plotly_scatter(self, x_values, y_values, x_label, y_label):
+        """Create Plotly scatter plot as JSON"""
+        try:
+            fig = go.Figure(data=[
+                go.Scatter(
+                    x=x_values,
+                    y=y_values,
+                    mode='markers',
+                    marker=dict(
+                        size=10,
+                        color='#3b82f6',
+                        opacity=0.7,
+                        line=dict(color='white', width=1)
+                    )
+                )
+            ])
+            
+            fig.update_layout(
+                title=f"{y_label} vs {x_label}",
+                xaxis_title=x_label,
+                yaxis_title=y_label,
+                showlegend=False,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                height=400
+            )
+            
+            fig.update_xaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+            fig.update_yaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+            
+            return fig.to_json()
+        except Exception as e:
+            print(f"⚠️ Plotly scatter generation failed: {e}")
+            return None
     
     def _explain_metric(self, column_name: str) -> str:
         """Provide human-readable explanation for metric names"""
