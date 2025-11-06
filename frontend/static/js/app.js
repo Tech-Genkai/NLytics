@@ -6,7 +6,13 @@
 class NLyticsApp {
     constructor() {
         this.sessionId = null;
-        this.apiUrl = window.location.hostname === 'localhost' 
+        // Check if running locally (localhost, 127.0.0.1, or any development port)
+        const isLocal = window.location.hostname === 'localhost' || 
+                       window.location.hostname === '127.0.0.1' ||
+                       window.location.hostname === '' ||
+                       window.location.port === '5000';
+        
+        this.apiUrl = isLocal
             ? 'http://localhost:5000/api' 
             : 'https://nlytics.onrender.com/api';
         
