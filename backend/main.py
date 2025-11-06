@@ -443,6 +443,7 @@ def chat():
             )
             generated_code = code_result
             logger.info(f"✅ Code generated ({len(code_result['code'])} chars)")
+            logger.info(f"📝 Generated code:\n{code_result['code']}")
             
             # Show generated code
             if attempt == 0:  # Only show code on first attempt

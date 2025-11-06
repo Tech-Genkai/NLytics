@@ -174,11 +174,15 @@ Important Rules:
 - Only ask for clarification if truly necessary (multiple equally valid options)
 
 **CRITICAL: Understanding "Growth" queries:**
-- "highest growing" = calculate PERCENTAGE GROWTH, not just highest value
+- "highest growing" = calculate PERCENTAGE GROWTH or RATE OF CHANGE, not just highest value
 - "fastest growing" = calculate GROWTH RATE, not just highest value
 - "biggest increase" = calculate CHANGE or GROWTH, not just final value
-- Example: "highest growing stock" means calculate growth = (close - open) / open * 100, NOT just highest close_price
-- Always capture growth-related intent in the "explanation" field"""
+- Growth calculation depends on data structure:
+  * For price data: (current - previous) / previous * 100
+  * For time series: trend analysis or period-over-period change
+  * For single snapshot: (close - open) / open * 100
+- Always capture growth-related intent in the "explanation" field
+- Let the query planner determine the specific calculation method based on available columns"""
 
     def _build_user_prompt(
         self, 

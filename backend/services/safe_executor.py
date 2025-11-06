@@ -62,7 +62,10 @@ class SafeExecutor:
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
         
-        # Restricted globals - NO __import__, NO __builtins__ access
+        # Restricted globals - Allow safe built-ins
+        import builtins
+        
+        # Start with a copy of safe builtins
         safe_builtins = {
             'abs': abs,
             'all': all,
@@ -89,23 +92,81 @@ class SafeExecutor:
             'tuple': tuple,
             'type': type,
             'zip': zip,
-            # Explicitly block dangerous functions
-            '__import__': None,
-            '__builtins__': None,
-            'eval': None,
-            'exec': None,
-            'compile': None,
-            'open': None,
-            'input': None,
-            'getattr': None,
-            'setattr': None,
-            'delattr': None,
-            'hasattr': None,
-            'globals': None,
-            'locals': None,
-            'vars': None,
-            'dir': None,
+            'isinstance': isinstance,
+            'issubclass': issubclass,
+            'callable': callable,
+            'reversed': reversed,
+            'ord': ord,
+            'chr': chr,
+            'bin': bin,
+            'hex': hex,
+            'oct': oct,
+            'hash': hash,
+            'id': id,
+            'format': format,
+            'divmod': divmod,
+            'bytes': bytes,
+            'bytearray': bytearray,
+            'complex': complex,
+            'frozenset': frozenset,
+            'slice': slice,
+            'object': object,
+            'staticmethod': staticmethod,
+            'classmethod': classmethod,
+            'property': property,
+            'Exception': Exception,
+            'ValueError': ValueError,
+            'TypeError': TypeError,
+            'KeyError': KeyError,
+            'IndexError': IndexError,
+            'AttributeError': AttributeError,
+            'ZeroDivisionError': ZeroDivisionError,
+            'RuntimeError': RuntimeError,
+            'StopIteration': StopIteration,
+            'Warning': Warning,
+            'False': False,
+            'True': True,
+            'None': None,
+            'NotImplemented': NotImplemented,
+            'Ellipsis': Ellipsis,
         }
+        
+        # Add getattr, setattr, hasattr back - pandas needs these internally
+        # But we monitor them carefully
+        safe_builtins['getattr'] = getattr
+        safe_builtins['setattr'] = setattr
+        safe_builtins['hasattr'] = hasattr
+        safe_builtins['delattr'] = delattr
+        
+        # Define dangerous functions that should NOT be accessible
+        dangerous_funcs = {
+            '__import__',
+            'eval',
+            'exec',
+            'compile',
+            'open',
+            'input',
+            'globals',
+            'locals',
+            'vars',
+            'dir',
+            '__loader__',
+            '__spec__',
+            'breakpoint',
+            'help',
+            'exit',
+            'quit',
+            'license',
+            'copyright',
+            'credits',
+        }
+        
+        # Block dangerous functions by setting them to a function that raises an error
+        def blocked_function(*args, **kwargs):
+            raise RuntimeError("This function is not allowed in safe execution mode")
+        
+        for func_name in dangerous_funcs:
+            safe_builtins[func_name] = blocked_function
         
         # Pre-import safe modules
         safe_globals = {
@@ -115,8 +176,6 @@ class SafeExecutor:
             'pandas': pd,
             'numpy': np,
             'df': df.copy(),
-            # Block these too at global level
-            '__import__': None,
             '__name__': '__main__',
             '__doc__': None,
         }

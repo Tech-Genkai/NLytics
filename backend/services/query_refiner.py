@@ -87,9 +87,11 @@ When users ask for "the highest/best/top" - they usually want to:
 **Refinement Rules:**
 
 1. **"Highest/Best/Top X" queries:**
-   - ❌ DON'T: Return just 1 result
-   - ✅ DO: Show top 5-10 for comparison
+   - ❌ DON'T: Return just 1 result unless explicitly asked for "the one" or "which single"
+   - ✅ DO: Show top 5-10 for comparison (default to 10 if unspecified)
+   - If user says "top 5" or "top 3", respect their number
    - Example: "highest growing stock" → "show top 10 stocks by growth percentage, ranked"
+   - Example: "show me the single best stock" → "show top 1 stock" (respect literal request)
 
 2. **Single value queries:**
    - ❌ DON'T: Return a scalar if a comparison would be more useful

@@ -64,8 +64,21 @@ class CodeGenerator:
             if 'code' not in result:
                 raise ValueError("Generated response missing 'code' field")
             
+            # Post-process: Remove any import statements (they cause errors in safe execution)
+            code = result['code']
+            code_lines = code.split('\n')
+            filtered_lines = []
+            for line in code_lines:
+                stripped = line.strip()
+                # Skip import statements
+                if stripped.startswith('import ') or stripped.startswith('from '):
+                    continue
+                filtered_lines.append(line)
+            
+            cleaned_code = '\n'.join(filtered_lines)
+            
             return {
-                'code': result['code'],
+                'code': cleaned_code,
                 'explanation': result.get('explanation', 'Execute query'),
                 'imports': result.get('imports', ['pandas', 'numpy']),
                 'variables': result.get('variables', {'result': 'final result'}),
@@ -89,22 +102,28 @@ class CodeGenerator:
 
 Your job is to generate clean, efficient, executable pandas code based on user queries.
 
+**EXECUTION ENVIRONMENT (Pre-configured for you):**
+- `df`: pandas.DataFrame - The input data (already loaded)
+- `pd`: pandas module (already imported)
+- `np`: numpy module (already imported)
+- All standard Python builtins: len, sum, max, min, range, etc.
+- NO file system access (open, read, write)
+- NO network access
+- NO subprocess/system calls
+
 **CRITICAL RULES:**
-1. Input dataframe is ALWAYS named `df`
-2. Final result MUST be stored in variable named `result`
-3. Use pandas and numpy operations only
-4. NO external libraries except pandas, numpy
-5. NO file I/O operations (no read_csv, to_csv, etc.)
+1. Input dataframe is ALWAYS named `df` (already exists in scope)
+2. Final result MUST be stored in variable named `result` (this is what gets returned)
+3. Use pandas and numpy operations only (use `pd` for pandas, `np` for numpy)
+4. DO NOT include import statements - pandas and numpy are already imported as `pd` and `np`
+5. NO file I/O operations (no read_csv, to_csv, open, etc.)
 6. NO system calls or dangerous operations
 7. Code must be production-ready and efficient
 8. Include comments explaining each step
 9. Handle edge cases (empty results, missing columns, etc.)
 
-**Code Structure:**
+**Code Structure (NO IMPORTS NEEDED):**
 ```python
-import pandas as pd
-import numpy as np
-
 # Step 1: Description
 intermediate_step = df.operation()
 
@@ -115,33 +134,45 @@ another_step = intermediate_step.operation()
 result = final_operation()
 ```
 
+**IMPORTANT: Do NOT include 'import pandas as pd' or 'import numpy as np' - they are already available!**
+
 **Output Format (JSON):**
 {
-  "code": "complete executable python code",
+  "code": "complete executable python code WITHOUT any import statements",
   "explanation": "plain English explanation of what code does",
-  "imports": ["pandas", "numpy"],
+  "imports": ["pandas", "numpy"],  // For documentation only, don't include in code
   "variables": {
-    "result": "description of final result variable",
+    "result": "description of final result variable (this will be extracted and returned)",
     "intermediate_var": "optional description of intermediate variables"
   },
   "warnings": ["optional warnings about data requirements or limitations"]
 }
 
-**Common Patterns:**
+**CRITICAL OUTPUT REQUIREMENTS:**
+- The `result` variable MUST exist after code execution
+- `result` should contain the answer to the user's query
+- `result` can be: DataFrame, Series, scalar (int/float/string), dict, or list
+- DO NOT print the result - it will be automatically captured
+- If no meaningful result, set `result = None`
+
+**Common Patterns (remember: NO imports needed!):**
 
 1. **Top N by column:**
 ```python
+# Get top 10 by column value
 result = df.nlargest(10, 'column_name')[['col1', 'col2', 'col3']]
 ```
 
 2. **Growth calculation:**
 ```python
+# Calculate growth percentage
 df['growth'] = ((df['end_value'] - df['start_value']) / df['start_value'] * 100)
 result = df.nlargest(10, 'growth')
 ```
 
 3. **Aggregation with grouping:**
 ```python
+# Group and aggregate
 result = df.groupby('category')['value'].mean().reset_index()
 result.columns = ['category', 'avg_value']
 result = result.sort_values('avg_value', ascending=False)
@@ -149,14 +180,18 @@ result = result.sort_values('avg_value', ascending=False)
 
 4. **Filtering:**
 ```python
+# Filter rows
 result = df[df['column'] > threshold].copy()
 ```
 
 5. **Complex calculations:**
 ```python
+# Calculate new metric
 df['new_metric'] = (df['col1'] + df['col2']) / df['col3']
 result = df.nlargest(10, 'new_metric')[['id', 'name', 'new_metric']]
 ```
+
+**REMEMBER: pandas is available as `pd`, numpy as `np`. DO NOT write import statements!**
 
 Always prioritize correctness, efficiency, and readability."""
 
@@ -198,15 +233,26 @@ Always prioritize correctness, efficiency, and readability."""
 Columns and types:
 {dtype_str}
 
-**Available Columns:**
+**Available Columns (use EXACT names):**
 {', '.join(df_columns)}
 
-Generate complete, executable pandas code that:
-1. Uses input dataframe `df`
-2. Stores final result in variable `result`
+**What's Already Available in Execution Environment:**
+- Variable `df`: pandas.DataFrame with the columns above
+- Module `pd`: pandas (already imported, don't import again)
+- Module `np`: numpy (already imported, don't import again)
+- All Python builtins: len(), sum(), max(), min(), etc.
+
+**What You Need to Generate:**
+Complete, executable pandas code that:
+1. Uses input dataframe `df` (already exists, don't create it)
+2. Stores final result in variable `result` (REQUIRED - this gets returned)
 3. Implements all steps from the execution plan
-4. Handles edge cases gracefully
-5. Includes clear comments"""
+4. Handles edge cases gracefully (empty df, missing values)
+5. Includes clear comments
+6. NO import statements (pd and np are already available)
+
+**Expected Output:**
+The code should define the `result` variable containing the answer."""
 
     def format_code_for_display(self, code_result: Dict[str, Any]) -> str:
         """Format generated code as markdown for chat display"""

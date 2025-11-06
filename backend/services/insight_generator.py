@@ -88,9 +88,9 @@ class InsightGenerator:
                     top_label = df.loc[top_idx, label_col]
                     bottom_label = df.loc[bottom_idx, label_col]
                     
-                    # More natural narrative
+                    # Neutral narrative language
                     narrative_parts.append(
-                        f"**{top_label}** leads with {metric_name.lower()} of **{max_val:.2f}**, "
+                        f"**{top_label}** has the highest {metric_name.lower()} at **{max_val:.2f}**, "
                         f"while **{bottom_label}** has the lowest at **{min_val:.2f}**."
                     )
                     findings.append(f"Highest: {top_label} ({max_val:.2f})")
