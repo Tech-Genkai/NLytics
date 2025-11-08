@@ -101,7 +101,16 @@ app = Flask(__name__,
             template_folder='../frontend',
             static_folder='../frontend/static')
 app.json.encoder = NumpyEncoder  # Use custom encoder for NumPy types
-CORS(app)
+
+# Configure CORS to allow requests from Render deployment
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:5000", "http://127.0.0.1:5000", "https://nlytics.onrender.com"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"],
+        "supports_credentials": False
+    }
+})
 
 # Configuration
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB limit
@@ -206,20 +215,34 @@ def new_session():
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     """Handle file upload and return initial schema inspection"""
+    # Log request details for debugging
+    logger.info(f"Upload request received - Content-Type: {request.content_type}")
+    logger.info(f"Form data keys: {list(request.form.keys())}")
+    logger.info(f"Files: {list(request.files.keys())}")
+    
     session_id = request.form.get('session_id')
     
-    if not session_id or session_id not in sessions:
-        return jsonify({'error': 'Invalid session'}), 400
+    if not session_id:
+        logger.error("No session_id in request")
+        return jsonify({'error': 'Missing session_id'}), 400
+    
+    if session_id not in sessions:
+        logger.error(f"Invalid session_id: {session_id}")
+        logger.info(f"Available sessions: {list(sessions.keys())}")
+        return jsonify({'error': 'Invalid or expired session. Please refresh the page.'}), 400
     
     if 'file' not in request.files:
+        logger.error("No file in request.files")
         return jsonify({'error': 'No file provided'}), 400
     
     file = request.files['file']
     
     if file.filename == '':
+        logger.error("Empty filename")
         return jsonify({'error': 'No file selected'}), 400
     
     if not allowed_file(file.filename):
+        logger.error(f"Invalid file type: {file.filename}")
         return jsonify({'error': 'File type not supported. Please upload CSV or Excel files.'}), 400
     
     try:

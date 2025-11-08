@@ -30,6 +30,20 @@ class NLyticsApp {
     }
     
     async init() {
+        // Verify API is accessible
+        try {
+            console.log('Checking API health at:', `${this.apiUrl}/health`);
+            const healthResponse = await fetch(`${this.apiUrl}/health`);
+            if (healthResponse.ok) {
+                const health = await healthResponse.json();
+                console.log('API health check passed:', health.status);
+            } else {
+                console.warn('API health check failed:', healthResponse.status);
+            }
+        } catch (error) {
+            console.error('API health check error:', error);
+        }
+        
         // Create new session
         await this.createSession();
         
@@ -70,12 +84,22 @@ class NLyticsApp {
     
     async createSession() {
         try {
+            console.log('Creating new session...');
             const response = await fetch(`${this.apiUrl}/session/new`, {
-                method: 'POST'
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
             });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
             
             const data = await response.json();
             this.sessionId = data.session_id;
+            
+            console.log('Session created successfully:', this.sessionId);
             
             // Display welcome message
             this.addMessage(data.message);
@@ -92,6 +116,8 @@ class NLyticsApp {
             return;
         }
         
+        console.log('Uploading file:', file.name, 'Session ID:', this.sessionId);
+        
         // Show loading
         this.showLoading('Uploading and analyzing file...');
         
@@ -99,13 +125,24 @@ class NLyticsApp {
         formData.append('file', file);
         formData.append('session_id', this.sessionId);
         
+        console.log('FormData contents:', {
+            file: file.name,
+            session_id: this.sessionId,
+            size: file.size,
+            type: file.type
+        });
+        
         try {
+            console.log('Sending request to:', `${this.apiUrl}/upload`);
             const response = await fetch(`${this.apiUrl}/upload`, {
                 method: 'POST',
                 body: formData
             });
             
+            console.log('Response status:', response.status, response.statusText);
+            
             const data = await response.json();
+            console.log('Response data:', data);
             
             if (data.success) {
                 // Add all messages (upload confirmation + health report)
@@ -117,14 +154,19 @@ class NLyticsApp {
                 this.enableInput();
                 this.inputHelp.textContent = 'Ask questions about your data...';
             } else {
+                console.error('Upload failed:', data);
                 if (data.message) {
                     this.addMessage(data.message);
+                } else if (data.error) {
+                    this.showError(data.error);
+                } else {
+                    this.showError('Upload failed. Please try again.');
                 }
             }
             
         } catch (error) {
             console.error('Upload failed:', error);
-            this.showError('Failed to upload file. Please try again.');
+            this.showError(`Failed to upload file: ${error.message}. Please try again.`);
         } finally {
             this.hideLoading();
             this.fileInput.value = ''; // Reset file input
