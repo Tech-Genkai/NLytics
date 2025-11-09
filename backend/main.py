@@ -79,7 +79,7 @@ def handle_error(session_id: str, error: Exception, context: str = "") -> Dict[s
     )
     
     if session_id and session_id in sessions:
-        sessions[session_id]['messages'].append(error_chat_msg.to_dict())
+        save_message_to_session(session_id, error_chat_msg)
     
     return error_chat_msg.to_dict()
 
@@ -118,9 +118,13 @@ app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), '..', 'dat
 app.config['PROCESSED_FOLDER'] = os.path.join(os.path.dirname(__file__), '..', 'data', 'processed')
 ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls'}
 
+# Session storage folder
+SESSION_FOLDER = os.path.join(os.path.dirname(__file__), '..', 'backend', 'data', 'sessions')
+
 # Ensure directories exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['PROCESSED_FOLDER'], exist_ok=True)
+os.makedirs(SESSION_FOLDER, exist_ok=True)
 
 # Initialize services
 file_handler = FileHandler(app.config['UPLOAD_FOLDER'])
@@ -136,8 +140,57 @@ safe_executor = SafeExecutor(timeout_seconds=30)
 insight_generator = InsightGenerator()
 answer_synthesizer = AnswerSynthesizer()
 
-# In-memory session store (will be replaced with proper storage later)
-sessions = {}
+# File-based session store (works across multiple Gunicorn workers)
+class FileSessionStore:
+    """Thread-safe file-based session storage for multi-worker deployments"""
+    def __init__(self, storage_dir):
+        self.storage_dir = storage_dir
+        os.makedirs(storage_dir, exist_ok=True)
+    
+    def _get_session_path(self, session_id):
+        return os.path.join(self.storage_dir, f"{session_id}.json")
+    
+    def __contains__(self, session_id):
+        return os.path.exists(self._get_session_path(session_id))
+    
+    def __getitem__(self, session_id):
+        path = self._get_session_path(session_id)
+        if not os.path.exists(path):
+            raise KeyError(f"Session {session_id} not found")
+        try:
+            with open(path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading session {session_id}: {e}")
+            raise KeyError(f"Session {session_id} corrupted")
+    
+    def __setitem__(self, session_id, value):
+        path = self._get_session_path(session_id)
+        try:
+            with open(path, 'w') as f:
+                json.dump(value, f)
+        except Exception as e:
+            logger.error(f"Error saving session {session_id}: {e}")
+    
+    def get(self, session_id, default=None):
+        try:
+            return self[session_id]
+        except KeyError:
+            return default
+    
+    def keys(self):
+        return [f.replace('.json', '') for f in os.listdir(self.storage_dir) if f.endswith('.json')]
+
+sessions = FileSessionStore(SESSION_FOLDER)
+
+
+def save_message_to_session(session_id: str, message: ChatMessage):
+    """Helper to append message and save session atomically"""
+    if session_id in sessions:
+        session_data = sessions[session_id]
+        session_data['messages'].append(message.to_dict())
+        sessions[session_id] = session_data
+
 
 # Initialize REST API with service instances
 service_dict = {
@@ -190,13 +243,14 @@ def index():
 def new_session():
     """Create a new chat session"""
     session_id = str(uuid.uuid4())
-    sessions[session_id] = {
+    session_data = {
         'id': session_id,
         'created_at': datetime.now(timezone.utc).isoformat(),
         'messages': [],
         'dataset': None,
         'context': {}
     }
+    sessions[session_id] = session_data
     
     welcome_msg = ChatMessage(
         type=MessageType.SYSTEM,
@@ -204,7 +258,10 @@ def new_session():
         metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
     )
     
-    sessions[session_id]['messages'].append(welcome_msg.to_dict())
+    session_data['messages'].append(welcome_msg.to_dict())
+    sessions[session_id] = session_data  # Save updated session
+    
+    logger.info(f"Created new session: {session_id}")
     
     return jsonify({
         'session_id': session_id,
@@ -252,6 +309,8 @@ def upload_file():
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{file_id}_{filename}")
         file.save(file_path)
         
+        logger.info(f"File saved: {file_path}")
+        
         # Load and inspect schema
         df = file_handler.load_file(file_path)
         schema_info = convert_numpy_types(schema_inspector.inspect(df, filename))
@@ -267,8 +326,9 @@ def upload_file():
         else:
             cleaned_df.to_excel(processed_path, index=False)
         
-        # Store dataset info in session
-        sessions[session_id]['dataset'] = {
+        # Load session and update it
+        session_data = sessions[session_id]
+        session_data['dataset'] = {
             'file_id': file_id,
             'filename': filename,
             'file_path': file_path,
@@ -291,7 +351,7 @@ def upload_file():
                 }
             }
         )
-        sessions[session_id]['messages'].append(upload_msg.to_dict())
+        session_data['messages'].append(upload_msg.to_dict())
         
         # Create health report message
         health_report = preprocessor.generate_health_report(preprocessing_manifest)
@@ -304,7 +364,12 @@ def upload_file():
                 'manifest': preprocessing_manifest
             }
         )
-        sessions[session_id]['messages'].append(health_msg.to_dict())
+        session_data['messages'].append(health_msg.to_dict())
+        
+        # Save updated session
+        sessions[session_id] = session_data
+        
+        logger.info(f"Upload successful for session {session_id}")
         
         return jsonify({
             'success': True,
@@ -344,27 +409,28 @@ def chat():
         content=user_message,
         metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
     )
-    sessions[session_id]['messages'].append(user_msg.to_dict())
+    save_message_to_session(session_id, user_msg)
     
     # Check if dataset is loaded
-    if not sessions[session_id].get('dataset'):
+    session_data = sessions[session_id]
+    if not session_data.get('dataset'):
         response_msg = ChatMessage(
             type=MessageType.SYSTEM,
             content="Please upload a dataset first before asking questions.",
             metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
         )
-        sessions[session_id]['messages'].append(response_msg.to_dict())
+        save_message_to_session(session_id, response_msg)
         return jsonify({'success': True, 'message': response_msg.to_dict()})
     
     # Phase 3: Process the query with AI
     try:
         # Load processed data
-        dataset_info = sessions[session_id]['dataset']
+        dataset_info = session_data['dataset']
         processed_path = dataset_info['processed_path']
         df = file_handler.load_file(processed_path)
         
         # Get conversation history for context
-        conversation_history = sessions[session_id]['messages']
+        conversation_history = session_data['messages']
         
         # Phase 3: AI-powered intent detection with full dataset context
         logger.info("🧠 Phase 3: Detecting intent with AI...")
@@ -395,7 +461,7 @@ def chat():
                     'intent_result': intent_result
                 }
             )
-            sessions[session_id]['messages'].append(response_msg.to_dict())
+            save_message_to_session(session_id, response_msg)
             return jsonify({'success': True, 'message': response_msg.to_dict()})
         
         # Phase 3.5: Query Refinement - Make queries more analytically useful
@@ -412,7 +478,7 @@ def chat():
                     content=refined_display,
                     metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
                 )
-                sessions[session_id]['messages'].append(refinement_msg.to_dict())
+                save_message_to_session(session_id, refinement_msg)
             
             # Use refined query for planning and code generation
             query_to_use = refinement.get('refined_query', user_message)
@@ -444,7 +510,7 @@ def chat():
                     'type': 'execution_plan'
                 }
             )
-            sessions[session_id]['messages'].append(plan_msg.to_dict())
+            save_message_to_session(session_id, plan_msg)
         
         # Phase 5-7: Code generation, validation, and execution loop
         df_dtypes = {col: str(dtype) for col, dtype in df.dtypes.items()}
@@ -480,7 +546,7 @@ def chat():
                         'type': 'generated_code'
                     }
                 )
-                sessions[session_id]['messages'].append(code_msg.to_dict())
+                save_message_to_session(session_id, code_msg)
             
             # Phase 6: Validate code
             logger.info("🔍 Phase 6: Validating code...")
@@ -502,7 +568,7 @@ def chat():
                         'type': 'validation_error'
                     }
                 )
-                sessions[session_id]['messages'].append(validation_msg.to_dict())
+                save_message_to_session(session_id, validation_msg)
                 
                 # Check if should retry
                 should_retry, feedback = retry_manager.should_retry(attempt + 1, validation_result)
@@ -513,7 +579,7 @@ def chat():
                         content=retry_display,
                         metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
                     )
-                    sessions[session_id]['messages'].append(retry_msg.to_dict())
+                    save_message_to_session(session_id, retry_msg)
                     continue  # Retry
                 else:
                     # Max retries reached
@@ -522,7 +588,7 @@ def chat():
                         content="Failed to generate valid code after multiple attempts.",
                         metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
                     )
-                    sessions[session_id]['messages'].append(error_msg.to_dict())
+                    save_message_to_session(session_id, error_msg)
                     return jsonify({'success': True, 'message': error_msg.to_dict()})
             
             # Phase 7: Execute code safely
@@ -554,7 +620,7 @@ def chat():
                             'type': 'insights'
                         }
                     )
-                    sessions[session_id]['messages'].append(insights_msg.to_dict())
+                    save_message_to_session(session_id, insights_msg)
                     messages_to_send.append(insights_msg.to_dict())
                 
                 # Phase 8b: Synthesize plain-language answer
@@ -579,7 +645,7 @@ def chat():
                                 'type': 'answer'
                             }
                         )
-                        sessions[session_id]['messages'].append(answer_msg.to_dict())
+                        save_message_to_session(session_id, answer_msg)
                         messages_to_send.append(answer_msg.to_dict())
                         logger.info("✅ Answer synthesized successfully")
                     else:
@@ -611,7 +677,7 @@ def chat():
                             'type': 'execution_result'
                         }
                     )
-                    sessions[session_id]['messages'].append(result_msg.to_dict())
+                    save_message_to_session(session_id, result_msg)
                     return jsonify({
                         'success': True,
                         'message': result_msg.to_dict()
@@ -629,7 +695,7 @@ def chat():
                         'type': 'execution_error'
                     }
                 )
-                sessions[session_id]['messages'].append(error_msg.to_dict())
+                save_message_to_session(session_id, error_msg)
                 
                 # Try regenerating code with error feedback
                 if attempt < retry_manager.max_retries - 1:
@@ -639,7 +705,7 @@ def chat():
                         content=f"🔄 Regenerating code (Attempt {attempt + 2}/{retry_manager.max_retries})",
                         metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
                     )
-                    sessions[session_id]['messages'].append(retry_msg.to_dict())
+                    save_message_to_session(session_id, retry_msg)
                     continue
                 else:
                     return jsonify({'success': True, 'message': error_msg.to_dict()})
@@ -650,7 +716,7 @@ def chat():
             content="Unable to execute query after multiple attempts.",
             metadata={'timestamp': datetime.now(timezone.utc).isoformat()}
         )
-        sessions[session_id]['messages'].append(final_error_msg.to_dict())
+        save_message_to_session(session_id, final_error_msg)
         return jsonify({'success': True, 'message': final_error_msg.to_dict()})
     
     except (KeyError, FileNotFoundError, Exception) as e:
