@@ -22,6 +22,7 @@ class NLyticsApp {
         this.userInput = document.getElementById('user-input');
         this.sendBtn = document.getElementById('send-btn');
         this.uploadBtn = document.getElementById('upload-btn');
+        this.previewBtn = document.getElementById('preview-btn');
         this.fileInput = document.getElementById('file-input');
         this.loadingIndicator = document.getElementById('loading');
         this.inputHelp = document.querySelector('.input-help');
@@ -79,6 +80,11 @@ class NLyticsApp {
             if (this.fileInput.files.length > 0) {
                 this.uploadFile(this.fileInput.files[0]);
             }
+        });
+        
+        // Preview button
+        this.previewBtn.addEventListener('click', () => {
+            this.showDataPreview();
         });
     }
     
@@ -153,6 +159,8 @@ class NLyticsApp {
                 }
                 this.enableInput();
                 this.inputHelp.textContent = 'Ask questions about your data...';
+                // Show preview button
+                this.previewBtn.style.display = 'block';
             } else {
                 console.error('Upload failed:', data);
                 if (data.message) {
@@ -231,10 +239,20 @@ class NLyticsApp {
         messageEl.className = `message message-${message.type}`;
         
         // Format timestamp
-        const timestamp = new Date(message.timestamp).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        let timestamp = 'Now';
+        if (message.timestamp) {
+            try {
+                const date = new Date(message.timestamp);
+                if (!isNaN(date.getTime())) {
+                    timestamp = date.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                }
+            } catch (e) {
+                timestamp = 'Now';
+            }
+        }
         
         // Render based on message type
         if (message.type === 'user') {
@@ -275,11 +293,18 @@ class NLyticsApp {
     formatContent(content) {
         // Use marked.js for markdown if available
         if (typeof marked !== 'undefined') {
+            // Configure marked to preserve emojis and special characters
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+                sanitize: false,
+                smartypants: false
+            });
             return marked.parse(content);
         }
         
-        // Fallback: Simple markdown formatting
-        let formatted = this.escapeHtml(content);
+        // Fallback: Simple markdown formatting (don't escape HTML to preserve emojis)
+        let formatted = content;
         
         // Code blocks
         formatted = formatted.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
@@ -608,6 +633,94 @@ class NLyticsApp {
             content: message,
             timestamp: new Date().toISOString()
         });
+    }
+    
+    async showDataPreview() {
+        if (!this.sessionId) {
+            this.showError('No active session');
+            return;
+        }
+        
+        this.showLoading('Loading data preview...');
+        
+        try {
+            const response = await fetch(`${this.apiUrl}/session/${this.sessionId}/preview`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Create preview message
+            const previewContent = this.formatDataPreview(data);
+            
+            this.addMessage({
+                type: 'system',
+                content: previewContent,
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    type: 'data_preview',
+                    preview_data: data
+                }
+            });
+            
+        } catch (error) {
+            console.error('Preview failed:', error);
+            this.showError(`Failed to load preview: ${error.message}`);
+        } finally {
+            this.hideLoading();
+        }
+    }
+    
+    formatDataPreview(data) {
+        let html = `### &#128203; Data Preview (Preprocessed)\n\n`;
+        html += `**Total Rows:** ${data.total_rows.toLocaleString()} | **Columns:** ${data.total_columns}\n`;
+        html += `**Showing:** First 20 rows\n\n`;
+        
+        if (data.preprocessing_applied && data.preprocessing_applied.length > 0) {
+            html += `**Preprocessing Applied:**\n`;
+            data.preprocessing_applied.forEach(step => {
+                html += `- ${step.replace(/_/g, ' ')}\n`;
+            });
+            html += '\n';
+        }
+        
+        // Create table
+        html += '<div style="overflow-x: auto; max-height: 400px; margin-top: 10px;">\n';
+        html += '<table style="width: 100%; border-collapse: collapse; font-size: 12px;">\n';
+        
+        // Header
+        html += '<thead style="position: sticky; top: 0; background: #2d3748; color: white;">\n<tr>\n';
+        data.columns.forEach(col => {
+            const dtype = data.dtypes[col] || '';
+            html += `<th style="border: 1px solid #4a5568; padding: 8px; text-align: left; white-space: nowrap;">${col}<br/><span style="font-size: 10px; color: #a0aec0;">${dtype}</span></th>\n`;
+        });
+        html += '</tr>\n</thead>\n';
+        
+        // Body - first 20 rows for display
+        html += '<tbody>\n';
+        const displayRows = data.data.slice(0, 20);
+        displayRows.forEach((row, idx) => {
+            const bgColor = idx % 2 === 0 ? '#f7fafc' : '#ffffff';
+            html += `<tr style="background: ${bgColor};">\n`;
+            data.columns.forEach(col => {
+                let value = row[col];
+                if (value === null || value === undefined) {
+                    value = '<span style="color: #cbd5e0;">null</span>';
+                } else if (typeof value === 'number') {
+                    value = value.toLocaleString();
+                } else if (typeof value === 'string' && value.length > 50) {
+                    value = value.substring(0, 50) + '...';
+                }
+                html += `<td style="border: 1px solid #e2e8f0; padding: 6px; white-space: nowrap; color: #1a202c;">${value}</td>\n`;
+            });
+            html += '</tr>\n';
+        });
+        html += '</tbody>\n';
+        html += '</table>\n</div>\n';
+        
+        return html;
     }
     
     escapeHtml(text) {

@@ -736,6 +736,47 @@ def get_messages(session_id):
     })
 
 
+@app.route('/api/session/<session_id>/preview', methods=['GET'])
+def preview_data(session_id):
+    """Preview the preprocessed dataset"""
+    if session_id not in sessions:
+        return jsonify({'error': 'Session not found'}), 404
+    
+    session_data = sessions[session_id]
+    if not session_data.get('dataset'):
+        return jsonify({'error': 'No dataset loaded'}), 400
+    
+    try:
+        # Load processed data
+        processed_path = session_data['dataset']['processed_path']
+        df = file_handler.load_file(processed_path)
+        
+        # Get preview (first 100 rows)
+        preview_df = df.head(100)
+        
+        # Convert datetime columns to strings for JSON serialization
+        for col in preview_df.columns:
+            if pd.api.types.is_datetime64_any_dtype(preview_df[col]):
+                preview_df[col] = preview_df[col].astype(str)
+        
+        # Convert to records format for JSON
+        preview_data = {
+            'total_rows': len(df),
+            'total_columns': len(df.columns),
+            'preview_rows': len(preview_df),
+            'columns': df.columns.tolist(),
+            'dtypes': {col: str(dtype) for col, dtype in df.dtypes.items()},
+            'data': convert_numpy_types(preview_df.to_dict('records')),
+            'preprocessing_applied': session_data['dataset']['preprocessing_manifest']['steps_applied']
+        }
+        
+        return jsonify(preview_data)
+        
+    except Exception as e:
+        logger.error(f"Preview failed: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""

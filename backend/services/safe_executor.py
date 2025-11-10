@@ -262,12 +262,43 @@ class SafeExecutor:
                     lines.append(f"**Length**: {len(result)}")
                     lines.append("")
                     lines.append(self._format_series(result))
+                
+                elif isinstance(result, dict):
+                    lines.append(f"**Components**: {len(result)} items")
+                    lines.append("")
+                    lines.append(self._format_dict(result))
+                
+                elif isinstance(result, (list, tuple)):
+                    type_name = "List" if isinstance(result, list) else "Tuple"
+                    lines.append(f"**{type_name} Length**: {len(result)}")
+                    lines.append("")
+                    lines.append(self._format_list(result))
+                
+                elif isinstance(result, np.ndarray):
+                    lines.append(f"**Array Shape**: {result.shape}")
+                    lines.append("")
+                    lines.append(self._format_numpy_array(result))
+                
+                elif isinstance(result, str):
+                    lines.append(f"**String Length**: {len(result)} characters")
+                    lines.append("")
+                    if len(result) < 500:
+                        lines.append(f'**Value**: "{result}"')
+                    else:
+                        lines.append(f'**Preview**:\n"{result[:500]}..."')
+                
+                elif isinstance(result, bool):
+                    lines.append(f"**Boolean**: {result} {'✓' if result else '✗'}")
                     
-                elif isinstance(result, (int, float, str, bool)):
+                elif isinstance(result, (int, float)):
                     lines.append(f"**Value**: {result}")
+                
+                elif result is None:
+                    lines.append("**No result returned** (None)")
                     
                 else:
-                    lines.append(f"```\n{str(result)[:500]}\n```")
+                    # Unknown type
+                    lines.append(f"**Value**: {str(result)[:500]}")
             
             # Show stdout if any
             if execution_result.get('stdout'):
@@ -320,9 +351,100 @@ class SafeExecutor:
         
         lines = []
         for idx, val in display_series.items():
-            lines.append(f"- **{idx}**: {val}")
+            if isinstance(val, float):
+                lines.append(f"- **{idx}**: {val:.4f}")
+            else:
+                lines.append(f"- **{idx}**: {val}")
         
         if len(series) > max_items:
             lines.append(f"_... {len(series) - max_items} more items_")
+        
+        return '\n'.join(lines)
+    
+    def _format_dict(self, result_dict: dict, max_items: int = 5) -> str:
+        """Format dictionary results for display"""
+        lines = []
+        
+        for i, (key, value) in enumerate(result_dict.items()):
+            if i >= max_items:
+                lines.append(f"\n_... {len(result_dict) - max_items} more components_")
+                break
+            
+            key_display = str(key).replace('_', ' ').title()
+            lines.append(f"\n**{key_display}:**")
+            
+            if isinstance(value, pd.DataFrame):
+                rows, cols = value.shape
+                lines.append(f"- DataFrame with {rows} rows × {cols} columns")
+                
+                # Show summary of numeric columns
+                numeric_cols = value.select_dtypes(include=['number']).columns
+                if len(numeric_cols) > 0:
+                    for col in numeric_cols[:3]:  # First 3 numeric columns
+                        mean_val = value[col].mean()
+                        lines.append(f"  - {col}: avg = {mean_val:.2f}")
+            
+            elif isinstance(value, pd.Series):
+                lines.append(f"- Series with {len(value)} values")
+                
+                # Show first few values
+                for idx, val in list(value.head(3).items()):
+                    if isinstance(val, float):
+                        lines.append(f"  - {idx}: {val:.4f}")
+                    else:
+                        lines.append(f"  - {idx}: {val}")
+                
+                if len(value) > 3:
+                    lines.append(f"  - ... ({len(value) - 3} more)")
+            
+            elif isinstance(value, (int, float)):
+                lines.append(f"- {value:.4f}")
+            
+            else:
+                lines.append(f"- {type(value).__name__}: {str(value)[:100]}")
+        
+        return '\n'.join(lines)
+    
+    def _format_list(self, result_list: list, max_items: int = 10) -> str:
+        """Format list/tuple results for display"""
+        if len(result_list) == 0:
+            return "_Empty list_"
+        
+        lines = []
+        for i, item in enumerate(result_list[:max_items]):
+            if isinstance(item, float):
+                lines.append(f"{i+1}. {item:.4f}")
+            elif isinstance(item, str) and len(str(item)) > 100:
+                lines.append(f"{i+1}. {str(item)[:100]}...")
+            else:
+                lines.append(f"{i+1}. {item}")
+        
+        if len(result_list) > max_items:
+            lines.append(f"\n_... {len(result_list) - max_items} more items_")
+        
+        return '\n'.join(lines)
+    
+    def _format_numpy_array(self, array: np.ndarray, max_items: int = 20) -> str:
+        """Format numpy array for display"""
+        lines = []
+        
+        # Show array info
+        lines.append(f"**Shape**: {array.shape}")
+        lines.append(f"**Data type**: {array.dtype}")
+        lines.append(f"**Size**: {array.size} elements\n")
+        
+        # For numeric arrays, show stats
+        if np.issubdtype(array.dtype, np.number) and array.size > 0:
+            lines.append(f"**Stats:**")
+            lines.append(f"- Min: {np.min(array):.4f}")
+            lines.append(f"- Max: {np.max(array):.4f}")
+            lines.append(f"- Mean: {np.mean(array):.4f}\n")
+        
+        # Show sample values
+        flat = array.flatten()
+        if len(flat) <= max_items:
+            lines.append(f"**Values**: {flat}")
+        else:
+            lines.append(f"**Sample** (first {max_items}): {flat[:max_items]}")
         
         return '\n'.join(lines)

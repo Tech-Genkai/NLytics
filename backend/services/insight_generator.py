@@ -44,8 +44,14 @@ class InsightGenerator:
             insights.update(self._analyze_dataframe(result, query))
         elif isinstance(result, pd.Series):
             insights.update(self._analyze_series(result, query))
+        elif isinstance(result, dict):
+            insights.update(self._analyze_dict(result, query))
         elif isinstance(result, (int, float)):
             insights.update(self._analyze_scalar(result, query))
+        else:
+            # For any other type (list, tuple, str, bool, None, numpy array, etc.)
+            # Just provide basic info - let AI Answer Synthesizer handle the explanation
+            insights.update(self._analyze_generic(result, query))
         
         # Add export options
         insights['export_options'] = self._get_export_options(result)
@@ -139,6 +145,59 @@ class InsightGenerator:
             'recommendations': ["View distribution", "Compare trends"]
         }
     
+    def _analyze_dict(self, result_dict: dict, query: str) -> Dict[str, Any]:
+        """Analyze dictionary results - often contains multiple DataFrames/Series"""
+        narrative_parts = []
+        findings = []
+        
+        # Count what's in the dictionary
+        num_keys = len(result_dict)
+        narrative_parts.append(f"Analysis contains **{num_keys} components**:")
+        
+        # Analyze each key-value pair
+        for key, value in result_dict.items():
+            key_display = str(key).replace('_', ' ').title()
+            
+            if isinstance(value, pd.DataFrame):
+                rows, cols = value.shape
+                narrative_parts.append(f"\n**{key_display}**: {rows} rows × {cols} columns")
+                
+                # Get summary stats for first numeric column
+                numeric_cols = value.select_dtypes(include=['number']).columns
+                if len(numeric_cols) > 0:
+                    first_col = numeric_cols[0]
+                    mean_val = value[first_col].mean()
+                    findings.append(f"{key_display} - Average {first_col}: {mean_val:.2f}")
+                
+            elif isinstance(value, pd.Series):
+                length = len(value)
+                narrative_parts.append(f"\n**{key_display}**: {length} values")
+                
+                if value.dtype in ['int64', 'float64']:
+                    mean_val = value.mean()
+                    findings.append(f"{key_display} - Average: {mean_val:.2f}")
+                
+            elif isinstance(value, (int, float)):
+                narrative_parts.append(f"\n**{key_display}**: {value:.2f}")
+                findings.append(f"{key_display}: {value:.2f}")
+            
+            else:
+                narrative_parts.append(f"\n**{key_display}**: {type(value).__name__}")
+        
+        # Try to create a visualization from the first DataFrame in the dict
+        viz = None
+        for key, value in result_dict.items():
+            if isinstance(value, pd.DataFrame):
+                viz = self._suggest_visualization(value)
+                break
+        
+        return {
+            'narrative': " ".join(narrative_parts),
+            'visualization': viz,
+            'key_findings': findings[:5],  # Top 5 findings
+            'recommendations': ["Examine individual components", "Export for detailed analysis"]
+        }
+    
     def _analyze_scalar(self, value: Any, query: str) -> Dict[str, Any]:
         """Analyze scalar results"""
         return {
@@ -146,6 +205,54 @@ class InsightGenerator:
             'visualization': None,
             'key_findings': [f"Single value: {value}"],
             'recommendations': ["Break down by category", "Compare with other metrics"]
+        }
+    
+    def _analyze_generic(self, result: Any, query: str) -> Dict[str, Any]:
+        """
+        Generic analyzer for any result type not specifically handled.
+        Provides basic info and lets AI Answer Synthesizer do the interpretation.
+        
+        Handles: list, tuple, str, bool, None, numpy arrays, and any unknown types
+        """
+        result_type = type(result).__name__
+        findings = [f"Type: {result_type}"]
+        
+        # Provide basic info based on type
+        if result is None:
+            narrative = "**No result returned.** The query completed but did not produce output."
+        elif isinstance(result, bool):
+            narrative = f"The result is: **{result}** {'✓' if result else '✗'}"
+        elif isinstance(result, str):
+            length = len(result)
+            if length < 100:
+                narrative = f"The result is: **\"{result}\"**"
+            else:
+                narrative = f"Result is a text string with **{length} characters**."
+                findings.append(f"{length} chars")
+        elif isinstance(result, (list, tuple)):
+            length = len(result)
+            narrative = f"Found **{length} items** in the result."
+            findings.append(f"{length} items")
+        elif hasattr(result, 'shape'):  # numpy array
+            narrative = f"Result is an array with shape **{result.shape}**."
+            findings.append(f"Shape: {result.shape}")
+        elif hasattr(result, '__len__'):
+            length = len(result)
+            narrative = f"Result has **{length} elements**."
+            findings.append(f"{length} elements")
+        else:
+            # Unknown type - basic display
+            try:
+                result_str = str(result)[:100]
+                narrative = f"Result: `{result_str}`"
+            except:
+                narrative = f"Result type: **{result_type}**"
+        
+        return {
+            'narrative': narrative,
+            'visualization': None,
+            'key_findings': findings,
+            'recommendations': []  # Let AI answer provide the interpretation
         }
     
     def _get_color_palette(self, count: int) -> List[str]:

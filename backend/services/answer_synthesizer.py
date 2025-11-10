@@ -103,11 +103,96 @@ class AnswerSynthesizer:
                 
                 return "\n".join(lines)
             elif isinstance(result, pd.Series):
-                return str(result.to_dict())
-            elif isinstance(result, (int, float, str)):
-                return str(result)
+                # Format Series nicely
+                if len(result) == 0:
+                    return "No results found"
+                
+                lines = []
+                for idx, val in result.head(20).items():
+                    if isinstance(val, float):
+                        lines.append(f"{idx}: {val:.4f}")
+                    else:
+                        lines.append(f"{idx}: {val}")
+                
+                if len(result) > 20:
+                    lines.append(f"... ({len(result) - 20} more values)")
+                
+                return "\n".join(lines)
+            elif isinstance(result, dict):
+                # Handle dictionary results
+                lines = []
+                lines.append("Results contain multiple components:\n")
+                
+                for key, value in result.items():
+                    key_display = str(key).replace('_', ' ').title()
+                    
+                    if isinstance(value, pd.DataFrame):
+                        rows, cols = value.shape
+                        lines.append(f"\n{key_display} ({rows} rows):")
+                        
+                        # Show first few rows
+                        display_df = value.head(5)
+                        for col in display_df.columns:
+                            if display_df[col].dtype in ['int64', 'float64']:
+                                mean_val = display_df[col].mean()
+                                lines.append(f"  - {col}: avg={mean_val:.2f}")
+                    
+                    elif isinstance(value, pd.Series):
+                        lines.append(f"\n{key_display}:")
+                        for idx, val in value.head(10).items():
+                            if isinstance(val, float):
+                                lines.append(f"  - {idx}: {val:.4f}")
+                            else:
+                                lines.append(f"  - {idx}: {val}")
+                        
+                        if len(value) > 10:
+                            lines.append(f"  ... ({len(value) - 10} more)")
+                    
+                    elif isinstance(value, (int, float)):
+                        lines.append(f"{key_display}: {value:.4f}")
+                    else:
+                        lines.append(f"{key_display}: {type(value).__name__}")
+                
+                return "\n".join(lines)
+            elif isinstance(result, (list, tuple)):
+                # Handle list/tuple results
+                if len(result) == 0:
+                    return "Empty list - no results found"
+                
+                lines = []
+                lines.append(f"List with {len(result)} items:")
+                
+                # Show sample items
+                for i, item in enumerate(result[:20]):
+                    if isinstance(item, float):
+                        lines.append(f"{i+1}. {item:.4f}")
+                    else:
+                        lines.append(f"{i+1}. {item}")
+                
+                if len(result) > 20:
+                    lines.append(f"... ({len(result) - 20} more items)")
+                
+                return "\n".join(lines)
+            elif isinstance(result, (int, float)):
+                return f"Numeric result: {result}"
+            elif isinstance(result, str):
+                # Handle string results
+                return f'Text result: "{result}"' if len(result) < 500 else f'Long text ({len(result)} chars): "{result[:500]}..."'
+            elif isinstance(result, bool):
+                return f"Boolean result: {result}"
+            elif result is None:
+                return "No result returned (None)"
             else:
-                return None
+                # For ANY other type, just convert to string and let AI figure it out
+                # AI is smart enough to interpret numpy arrays, custom objects, etc.
+                try:
+                    result_str = str(result)
+                    # Truncate if too long
+                    if len(result_str) > 2000:
+                        result_str = result_str[:2000] + "... (truncated)"
+                    return f"{type(result).__name__}:\n{result_str}"
+                except:
+                    return f"Result of type {type(result).__name__} (unable to display as text)"
         except Exception as e:
             print(f"⚠️ Error converting result to text: {str(e)}")
             return f"Results: {len(result) if hasattr(result, '__len__') else 1} items"
