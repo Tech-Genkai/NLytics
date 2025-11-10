@@ -66,17 +66,17 @@ Phase 9: Answer Synthesis & Presentation
                   │
         ┌─────────┴─────────┐
         │                   │
-┌───────▼────────┐  ┌──────▼─────────┐
-│  Chat API      │  │  REST API      │
-│  /api/chat     │  │  /api/v1/*     │
+┌───────▼────────┐  ┌───────▼─────────┐
+│  Chat API      │  │  REST API       │
+│  /api/chat     │  │  /api/v1/*      │
 │  /api/upload   │  │  /api/v1/analyze│
-│  /api/session  │  │  /api/v1/query │
-└───────┬────────┘  └──────┬─────────┘
+│  /api/session  │  │  /api/v1/query  │
+└───────┬────────┘  └───────┬─────────┘
         │                   │
         └─────────┬─────────┘
                   │
-┌─────────────────▼───────────────────────┐
-│         Service Layer                   │
+┌─────────────────▼──────────────────────┐
+│         Service Layer                  │
 │  ┌────────────────────────────────┐    │
 │  │  AI Services (Groq)            │    │
 │  │  - Intent Detector             │    │
@@ -97,7 +97,7 @@ Phase 9: Answer Synthesis & Presentation
 │  │  - Safe Executor               │    │
 │  │  - Insight Generator           │    │
 │  └────────────────────────────────┘    │
-└─────────────────────────────────────────┘
+└────────────────────────────────────────┘
 ```
 
 ### Data Flow

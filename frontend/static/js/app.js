@@ -267,12 +267,14 @@ class NLyticsApp {
             const contentHtml = this.formatContent(message.content);
             const metadataHtml = this.renderMetadata(message.metadata);
             const visualizationHtml = this.renderVisualization(message.metadata);
+            const codeButtonHtml = this.renderCodeButton(message.metadata);
             
             messageEl.innerHTML = `
                 <div class="message-content">
                     <div class="message-text">${contentHtml}</div>
                     ${metadataHtml}
                     ${visualizationHtml}
+                    ${codeButtonHtml}
                     <div class="message-time">${timestamp}</div>
                 </div>
             `;
@@ -382,6 +384,44 @@ class NLyticsApp {
         }
         
         return html;
+    }
+    
+    renderCodeButton(metadata) {
+        // If there's insight metadata with generated code, show a "Show Code" button
+        if (metadata && metadata.insights && metadata.generated_code) {
+            const code = metadata.generated_code;
+            const codeId = `code-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            return `
+                <div class="code-toggle-wrapper">
+                    <button class="btn-show-code" onclick="window.nlytics.toggleCode('${codeId}')">
+                        <span class="code-icon">🐍</span> Show Code
+                    </button>
+                    <div id="${codeId}" class="code-block code-hidden">
+                        <div class="code-header">
+                            <span>Generated Python Code</span>
+                            <button class="copy-btn" onclick="navigator.clipboard.writeText(this.dataset.code)" data-code="${this.escapeHtml(code)}">📋 Copy</button>
+                        </div>
+                        <pre><code class="language-python">${this.escapeHtml(code)}</code></pre>
+                    </div>
+                </div>
+            `;
+        }
+        return '';
+    }
+    
+    toggleCode(codeId) {
+        const codeBlock = document.getElementById(codeId);
+        const button = codeBlock.previousElementSibling;
+        
+        if (codeBlock.classList.contains('code-hidden')) {
+            codeBlock.classList.remove('code-hidden');
+            codeBlock.classList.add('code-visible');
+            button.innerHTML = '<span class="code-icon">🐍</span> Hide Code';
+        } else {
+            codeBlock.classList.remove('code-visible');
+            codeBlock.classList.add('code-hidden');
+            button.innerHTML = '<span class="code-icon">🐍</span> Show Code';
+        }
     }
     
     renderVisualization(metadata) {
@@ -769,5 +809,7 @@ class NLyticsApp {
 
 // Initialize app when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    new NLyticsApp();
+    const app = new NLyticsApp();
+    // Expose app instance globally for onclick handlers
+    window.nlytics = app;
 });

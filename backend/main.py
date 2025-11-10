@@ -625,6 +625,7 @@ def chat():
                         metadata={
                             'timestamp': datetime.now(timezone.utc).isoformat(),
                             'insights': insights,
+                            'generated_code': code_result['code'],  # Include code for "Show Code" button
                             'type': 'insights'
                         }
                     )
