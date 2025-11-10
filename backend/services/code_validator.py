@@ -46,6 +46,16 @@ class CodeValidator:
             r'\.to_pickle\(',
             r'\.to_hdf\(',
             r'\bfile\s*\(',
+            # Plotting libraries (not available in sandbox)
+            r'\bplt\.',
+            r'\bmatplotlib\.',
+            r'\bseaborn\.',
+            r'\bplotly\.',
+            r'\.plot\(',
+            r'\.hist\(',
+            r'\.scatter\(',
+            r'\.bar\(',
+            r'\bplt\s*\.',
         ]
         
         # Required patterns

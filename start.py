@@ -60,7 +60,8 @@ def cleanup_data_folders():
     
     cleanup_dirs = [
         Path("data") / "uploads",
-        Path("data") / "processed"
+        Path("data") / "processed",
+        Path("backend") / "data" / "sessions"
     ]
     
     for dir_path in cleanup_dirs:

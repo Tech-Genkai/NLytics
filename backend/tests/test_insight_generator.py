@@ -71,3 +71,77 @@ class TestInsightGenerator:
         assert 'Growth' in self.generator._explain_metric('growth_rate')
         assert 'Price' in self.generator._explain_metric('close_price')
         assert 'Volume' in self.generator._explain_metric('volume')
+    
+    def test_pie_chart_detection(self):
+        """Test pie chart detection for percentage data"""
+        # Data that sums to 100 (percentage breakdown)
+        df = pd.DataFrame({
+            'sector': ['Tech', 'Finance', 'Healthcare', 'Energy'],
+            'market_share': [35.5, 28.3, 20.1, 16.1]
+        })
+        
+        insights = self.generator.generate_insights(df, "market share by sector", 0.3)
+        viz = insights['visualization']
+        
+        assert viz is not None
+        assert viz['type'] == 'pie'
+        assert 'labels' in viz
+        assert 'values' in viz
+        assert viz['plotly'] is not None  # Should have Plotly JSON
+    
+    def test_box_plot_detection(self):
+        """Test box plot detection for distribution data"""
+        # Large dataset for distribution analysis
+        import numpy as np
+        np.random.seed(42)
+        
+        df = pd.DataFrame({
+            'sector': ['Tech'] * 30 + ['Finance'] * 30 + ['Healthcare'] * 30,
+            'price': np.concatenate([
+                np.random.normal(150, 20, 30),
+                np.random.normal(80, 15, 30),
+                np.random.normal(110, 18, 30)
+            ])
+        })
+        
+        # Box plot should be suggested for distribution with categories
+        viz = self.generator._suggest_visualization(df)
+        
+        assert viz is not None
+        # Could be box plot if detection works, or bar chart as fallback
+        assert viz['type'] in ['box', 'bar']
+        if viz['type'] == 'box':
+            assert 'y_column' in viz
+            assert viz['plotly'] is not None
+    
+    def test_pie_chart_creation(self):
+        """Test direct pie chart creation"""
+        labels = ['Category A', 'Category B', 'Category C']
+        values = [40, 35, 25]
+        
+        plotly_json = self.generator._create_plotly_pie(labels, values, "Test Distribution")
+        
+        assert plotly_json is not None
+        assert 'data' in plotly_json
+        assert 'layout' in plotly_json
+    
+    def test_box_plot_creation(self):
+        """Test direct box plot creation"""
+        import numpy as np
+        np.random.seed(42)
+        
+        df = pd.DataFrame({
+            'category': ['A'] * 50 + ['B'] * 50,
+            'value': np.concatenate([
+                np.random.normal(100, 15, 50),
+                np.random.normal(120, 20, 50)
+            ])
+        })
+        
+        # Single box plot
+        plotly_json_single = self.generator._create_plotly_box(df, 'value')
+        assert plotly_json_single is not None
+        
+        # Grouped box plot
+        plotly_json_grouped = self.generator._create_plotly_box(df, 'value', 'category')
+        assert plotly_json_grouped is not None

@@ -59,7 +59,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1.5rem 3rem;
+    padding: 1rem 3rem;
     background: var(--bg-darker);
     border-bottom: 1px solid var(--border-normal);
     backdrop-filter: blur(10px);
@@ -657,4 +657,41 @@ textarea:focus {
 
 .message-user .message-time {
     color: rgba(255, 255, 255, 0.6);
+}
+
+/* Query Suggestions */
+.query-suggestions {
+    margin: 15px 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.suggestion-item {
+    display: inline-flex;
+    align-items: center;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    border: 2px solid transparent;
+    font-weight: 500;
+}
+
+.suggestion-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.suggestion-item:active {
+    transform: translateY(0);
+}
+
+.suggestion-icon {
+    margin-right: 6px;
+    font-size: 16px;
 }

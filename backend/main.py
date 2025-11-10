@@ -556,6 +556,11 @@ def chat():
             )
             logger.info(f"Validation: {'✅ PASSED' if validation_result['valid'] else '❌ FAILED'}")
             
+            # Debug: Log validation errors
+            if not validation_result['valid']:
+                logger.info(f"🔍 Validation errors: {validation_result.get('errors', [])}")
+                logger.info(f"🔍 Validation warnings: {validation_result.get('warnings', [])}")
+            
             if not validation_result['valid']:
                 # Show validation errors
                 validation_display = code_validator.format_validation_for_display(validation_result)
@@ -603,10 +608,13 @@ def chat():
                 messages_to_send = []
                 
                 # Phase 8a: Generate insights (charts, key findings)
+                # Pass requested chart type from query refinement
+                requested_chart = refinement.get('requested_chart_type') if refinement else None
                 insights = insight_generator.generate_insights(
                     execution_result['result'],
                     user_message,
-                    execution_result['execution_time']
+                    execution_result['execution_time'],
+                    requested_chart_type=requested_chart
                 )
                 
                 if insights['narrative'] or insights['key_findings']:

@@ -87,12 +87,13 @@ class CodeGenerator:
             
         except Exception as e:
             print(f"❌ Code generation failed: {str(e)}")
-            # Return fallback code
+            # Use intelligent fallback based on query keywords
+            fallback_code = self._generate_fallback_code(query, df_columns, df_dtypes)
             return {
-                'code': '# Code generation failed\nresult = df.head(10)',
-                'explanation': f'Error generating code: {str(e)}',
+                'code': fallback_code,
+                'explanation': f'Using fallback code due to API error. Attempting to answer query with basic analysis.',
                 'imports': ['pandas'],
-                'variables': {'result': 'top 10 rows'},
+                'variables': {'result': 'query result'},
                 'error': str(e)
             }
     
@@ -110,6 +111,7 @@ Your job is to generate clean, efficient, executable pandas code based on user q
 - NO file system access (open, read, write)
 - NO network access
 - NO subprocess/system calls
+- NO plotting libraries (matplotlib, plotly, seaborn are NOT available)
 
 **CRITICAL RULES:**
 1. Input dataframe is ALWAYS named `df` (already exists in scope)
@@ -118,9 +120,24 @@ Your job is to generate clean, efficient, executable pandas code based on user q
 4. DO NOT include import statements - pandas and numpy are already imported as `pd` and `np`
 5. NO file I/O operations (no read_csv, to_csv, open, etc.)
 6. NO system calls or dangerous operations
-7. Code must be production-ready and efficient
-8. Include comments explaining each step
-9. Handle edge cases (empty results, missing columns, etc.)
+7. NO plotting code (plt, matplotlib, seaborn, plotly) - visualization is handled separately
+8. Code must be production-ready and efficient
+9. Include comments explaining each step
+10. Handle edge cases (empty results, missing columns, etc.)
+11. **TIME-SERIES DATA HANDLING**: If data has Date/Ticker columns with multiple rows per entity:
+    - For "top N" queries, MUST group by entity (ticker/company/name) first
+    - Aggregate values (sum/mean/last) across time periods
+    - THEN select top N entities, not top N rows
+    - Example: "top 10 companies by market cap" → group by ticker, average market cap, then nlargest(10)
+    - DON'T just do nlargest(10) on raw rows - you'll get the same entity multiple times!
+12. **VISUALIZATION QUERIES**: If user requests a specific chart type:
+    - **Scatter plot**: Return the RAW DATA POINTS (x and y columns), not aggregated stats
+      - WRONG: correlation coefficient only
+      - RIGHT: df[['x_col', 'y_col']].sample(min(50, len(df)))
+    - **Pie chart**: Return aggregated categories with values (e.g., grouped by company)
+    - **Box plot**: Return raw numeric data (can be grouped by category)
+    - **Bar chart**: Return aggregated data (top N, grouped totals, etc.)
+    - Visualization is handled AFTER code execution - just return the right data structure!
 
 **Code Structure (NO IMPORTS NEEDED):**
 ```python
@@ -154,6 +171,14 @@ result = final_operation()
 - `result` can be: DataFrame, Series, scalar (int/float/string), dict, or list
 - DO NOT print the result - it will be automatically captured
 - If no meaningful result, set `result = None`
+- DO NOT generate plotting code (plt, matplotlib, seaborn) - visualizations are created automatically from your result data
+
+**IMPORTANT: If user asks for a chart/graph/plot:**
+- Generate code to prepare the DATA only (top N rows, aggregated values, etc.)
+- Return the data as a DataFrame or Series in `result`
+- The system will AUTOMATICALLY create visualizations from your result
+- DO NOT use plt, matplotlib, seaborn, or any plotting library
+- Example: If asked "pie chart of top 10", return a DataFrame with top 10 rows - the system handles the chart
 
 **Common Patterns (remember: NO imports needed!):**
 
@@ -277,3 +302,67 @@ The code should define the `result` variable containing the answer."""
                 lines.append(f"- `{var}`: {desc}")
         
         return "\n".join(lines)
+    
+    def _generate_fallback_code(self, query: str, df_columns: List[str], df_dtypes: Dict[str, str]) -> str:
+        """
+        Generate intelligent fallback code when API fails
+        Attempts to answer common query patterns
+        """
+        query_lower = query.lower()
+        
+        # Detect numeric and categorical columns
+        numeric_cols = [col for col, dtype in df_dtypes.items() if dtype in ['int64', 'float64']]
+        categorical_cols = [col for col, dtype in df_dtypes.items() if dtype == 'object']
+        
+        # Pattern: "top N" or "highest" with numeric comparison
+        if any(keyword in query_lower for keyword in ['top', 'highest', 'largest', 'biggest', 'best']):
+            # Try to find value column (market cap, price, value, etc.)
+            value_col = None
+            for col in numeric_cols:
+                if any(keyword in col.lower() for keyword in ['cap', 'value', 'price', 'amount', 'total', 'sum']):
+                    value_col = col
+                    break
+            
+            # Try to find name/category column
+            name_col = None
+            for col in categorical_cols:
+                if any(keyword in col.lower() for keyword in ['name', 'company', 'stock', 'symbol', 'ticker']):
+                    name_col = col
+                    break
+            
+            # Extract number (default to 10)
+            import re
+            number_match = re.search(r'\b(\d+)\b', query)
+            top_n = int(number_match.group(1)) if number_match else 10
+            
+            if value_col and name_col:
+                # Group by name and sum, then get top N
+                return f"""# Get top {top_n} by {value_col}
+result = df.groupby('{name_col}')['{value_col}'].sum().sort_values(ascending=False).head({top_n}).reset_index()
+result.columns = ['{name_col}', '{value_col}']"""
+            elif value_col:
+                # Just sort by value
+                return f"""# Get top {top_n} by {value_col}
+result = df.nlargest({top_n}, '{value_col}')"""
+        
+        # Pattern: "show all" or "display"
+        if any(keyword in query_lower for keyword in ['show all', 'display all', 'list all', 'get all']):
+            return "# Show all data\nresult = df"
+        
+        # Pattern: "average" or "mean"
+        if any(keyword in query_lower for keyword in ['average', 'mean']):
+            if numeric_cols:
+                return f"""# Calculate averages
+result = df[{numeric_cols}].mean().to_frame('Average').reset_index()
+result.columns = ['Metric', 'Average']"""
+        
+        # Pattern: "count" or "how many"
+        if any(keyword in query_lower for keyword in ['count', 'how many', 'number of']):
+            if categorical_cols:
+                cat_col = categorical_cols[0]
+                return f"""# Count by {cat_col}
+result = df['{cat_col}'].value_counts().reset_index()
+result.columns = ['{cat_col}', 'Count']"""
+        
+        # Default fallback: show first 10 rows
+        return "# Show sample data\nresult = df.head(10)"

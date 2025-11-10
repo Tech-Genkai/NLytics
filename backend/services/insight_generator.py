@@ -19,10 +19,17 @@ class InsightGenerator:
         self,
         result: Any,
         query: str,
-        execution_time: float
+        execution_time: float,
+        requested_chart_type: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Generate insights from execution results
+        
+        Args:
+            result: The execution result (DataFrame, Series, scalar, etc.)
+            query: The original user query
+            execution_time: How long execution took
+            requested_chart_type: Explicitly requested chart type (pie, bar, scatter, etc.)
         
         Returns:
             {
@@ -41,7 +48,7 @@ class InsightGenerator:
         }
         
         if isinstance(result, pd.DataFrame):
-            insights.update(self._analyze_dataframe(result, query))
+            insights.update(self._analyze_dataframe(result, query, requested_chart_type))
         elif isinstance(result, pd.Series):
             insights.update(self._analyze_series(result, query))
         elif isinstance(result, dict):
@@ -58,7 +65,7 @@ class InsightGenerator:
         
         return insights
     
-    def _analyze_dataframe(self, df: pd.DataFrame, query: str) -> Dict[str, Any]:
+    def _analyze_dataframe(self, df: pd.DataFrame, query: str, requested_chart_type: Optional[str] = None) -> Dict[str, Any]:
         """Analyze DataFrame results"""
         rows, cols = df.shape
         
@@ -110,8 +117,13 @@ class InsightGenerator:
                     findings.append(f"Range: {min_val:.2f} - {max_val:.2f}")
                     findings.append(f"Average: {mean_val:.2f}")
         
-        # Determine visualization type
-        viz_type = self._suggest_visualization(df)
+        # Determine visualization type - RESPECT EXPLICIT REQUEST!
+        if requested_chart_type:
+            # User explicitly requested a chart type - create it!
+            viz_type = self._create_requested_visualization(df, requested_chart_type)
+        else:
+            # Auto-detect appropriate visualization
+            viz_type = self._suggest_visualization(df)
         
         recommendations = [
             "Export data for further analysis",
@@ -282,6 +294,153 @@ class InsightGenerator:
             colors.append(base_colors[i % len(base_colors)])
         return colors
     
+    def _create_requested_visualization(self, df: pd.DataFrame, chart_type: str) -> Optional[Dict[str, Any]]:
+        """
+        Create the specific visualization type requested by the user
+        
+        Args:
+            df: DataFrame with data
+            chart_type: Requested chart type (pie, bar, scatter, line, box)
+        
+        Returns:
+            Visualization config dict or None
+        """
+        rows, cols = df.shape
+        
+        if rows == 0 or cols == 0:
+            return None
+        
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        categorical_cols = df.select_dtypes(include=['object']).columns
+        
+        # Normalize chart type
+        chart_type = chart_type.lower() if chart_type else ''
+        
+        if chart_type == 'pie' and len(categorical_cols) >= 1 and len(numeric_cols) >= 1:
+            # Create pie chart
+            cat_col = categorical_cols[0]
+            num_col = numeric_cols[0]
+            
+            # Limit to reasonable number for pie chart
+            display_df = df.head(min(10, len(df)))
+            colors = self._get_color_palette(len(display_df))
+            
+            plotly_json = self._create_plotly_pie(
+                display_df[cat_col].tolist(),
+                display_df[num_col].tolist(),
+                f"{self._explain_metric(num_col)} by {cat_col}"
+            )
+            
+            return {
+                'type': 'pie',
+                'suitable': True,
+                'category_column': cat_col,
+                'value_column': num_col,
+                'labels': display_df[cat_col].tolist(),
+                'values': display_df[num_col].tolist(),
+                'colors': colors,
+                'description': f"{self._explain_metric(num_col)} by {cat_col}",
+                'plotly': plotly_json
+            }
+        
+        elif chart_type == 'bar' and len(categorical_cols) >= 1 and len(numeric_cols) >= 1:
+            # Create bar chart
+            cat_col = categorical_cols[0]
+            num_col = numeric_cols[0]
+            
+            top_data = df.nlargest(min(10, len(df)), num_col)
+            colors = self._get_color_palette(len(top_data))
+            metric_explanation = self._explain_metric(num_col)
+            
+            plotly_json = self._create_plotly_bar(
+                top_data[cat_col].tolist(),
+                top_data[num_col].tolist(),
+                colors,
+                metric_explanation,
+                cat_col
+            )
+            
+            return {
+                'type': 'bar',
+                'suitable': True,
+                'x_column': cat_col,
+                'y_column': num_col,
+                'x_values': top_data[cat_col].tolist(),
+                'y_values': top_data[num_col].tolist(),
+                'colors': colors,
+                'description': f"{metric_explanation} by {cat_col}",
+                'y_label': metric_explanation,
+                'plotly': plotly_json
+            }
+        
+        elif chart_type == 'scatter' and len(numeric_cols) >= 2:
+            # Create scatter plot
+            x_col = numeric_cols[0]
+            y_col = numeric_cols[1]
+            
+            sample_df = df.sample(min(50, len(df)))
+            
+            plotly_json = self._create_plotly_scatter(
+                sample_df[x_col].tolist(),
+                sample_df[y_col].tolist(),
+                x_col,
+                y_col
+            )
+            
+            return {
+                'type': 'scatter',
+                'suitable': True,
+                'x_column': x_col,
+                'y_column': y_col,
+                'x_values': sample_df[x_col].tolist(),
+                'y_values': sample_df[y_col].tolist(),
+                'point_color': '#3b82f6',
+                'description': f"Scatter plot of {y_col} vs {x_col}",
+                'plotly': plotly_json
+            }
+        
+        elif chart_type == 'box' and len(numeric_cols) >= 1:
+            # Create box plot
+            num_col = numeric_cols[0]
+            
+            if len(categorical_cols) >= 1:
+                cat_col = categorical_cols[0]
+                num_categories = df[cat_col].nunique()
+                
+                if num_categories <= 10:
+                    plotly_json = self._create_plotly_box(
+                        df, num_col, cat_col,
+                        f"Distribution of {num_col} by {cat_col}"
+                    )
+                    
+                    return {
+                        'type': 'box',
+                        'suitable': True,
+                        'y_column': num_col,
+                        'x_column': cat_col,
+                        'description': f"Distribution of {num_col} by {cat_col}",
+                        'plotly': plotly_json
+                    }
+            else:
+                # Single box plot
+                plotly_json = self._create_plotly_box(
+                    df, num_col,
+                    title=f"Distribution of {num_col}"
+                )
+                
+                return {
+                    'type': 'box',
+                    'suitable': True,
+                    'y_column': num_col,
+                    'description': f"Distribution of {num_col}",
+                    'plotly': plotly_json
+                }
+        
+        # If requested chart type can't be created with available data,
+        # fall back to auto-detection
+        print(f"⚠️ Requested chart type '{chart_type}' couldn't be created with available data. Auto-detecting...")
+        return self._suggest_visualization(df)
+    
     def _suggest_visualization(self, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
         """Suggest appropriate visualization based on data shape"""
         rows, cols = df.shape
@@ -293,7 +452,74 @@ class InsightGenerator:
         numeric_cols = df.select_dtypes(include=['number']).columns
         categorical_cols = df.select_dtypes(include=['object']).columns
         
-        # Suggest chart type based on data structure and include actual data
+        # Pattern 1: Check for percentage/ratio data (pie chart candidate)
+        if len(categorical_cols) >= 1 and len(numeric_cols) >= 1:
+            cat_col = categorical_cols[0]
+            num_col = numeric_cols[0]
+            
+            # If the numeric values look like percentages or proportions (sum to ~100 or ~1)
+            # or represent parts of a whole, suggest pie chart
+            total = df[num_col].sum()
+            is_percentage = (95 < total < 105) or (0.95 < total < 1.05)
+            is_small_categories = len(df) <= 10  # Pie works best with few categories
+            
+            # Keywords suggesting pie chart
+            pie_keywords = ['percentage', 'percent', 'share', 'proportion', 'distribution', 
+                           'composition', 'breakdown', 'split']
+            has_pie_keyword = any(keyword in num_col.lower() for keyword in pie_keywords)
+            
+            if (is_percentage or has_pie_keyword) and is_small_categories:
+                # Use pie/donut chart
+                colors = self._get_color_palette(len(df))
+                
+                plotly_json = self._create_plotly_pie(
+                    df[cat_col].tolist(),
+                    df[num_col].tolist(),
+                    f"{num_col} by {cat_col}"
+                )
+                
+                return {
+                    'type': 'pie',
+                    'suitable': True,
+                    'category_column': cat_col,
+                    'value_column': num_col,
+                    'labels': df[cat_col].tolist(),
+                    'values': df[num_col].tolist(),
+                    'colors': colors,
+                    'description': f"{num_col} by {cat_col}",
+                    'plotly': plotly_json
+                }
+        
+        # Pattern 2: Single numeric column with many values = box plot (distribution)
+        if len(numeric_cols) >= 1 and rows > 20:
+            num_col = numeric_cols[0]
+            
+            # Check for distribution/outlier keywords
+            dist_keywords = ['distribution', 'outlier', 'spread', 'range', 'variance']
+            # Note: We can't check the query here, but the data pattern is good
+            
+            # If we have a categorical column, do grouped box plot
+            if len(categorical_cols) >= 1:
+                cat_col = categorical_cols[0]
+                
+                # Only do grouped box if reasonable number of categories
+                num_categories = df[cat_col].nunique()
+                if num_categories <= 10:
+                    plotly_json = self._create_plotly_box(
+                        df, num_col, cat_col,
+                        f"Distribution of {num_col} by {cat_col}"
+                    )
+                    
+                    return {
+                        'type': 'box',
+                        'suitable': True,
+                        'y_column': num_col,
+                        'x_column': cat_col,
+                        'description': f"Distribution of {num_col} by {cat_col}",
+                        'plotly': plotly_json
+                    }
+        
+        # Pattern 3: Category + numeric = bar chart (existing logic)
         if len(categorical_cols) >= 1 and len(numeric_cols) >= 1:
             # Category + numeric = bar chart
             cat_col = categorical_cols[0]
@@ -451,6 +677,101 @@ class InsightGenerator:
             return fig.to_json()
         except Exception as e:
             print(f"⚠️ Plotly scatter generation failed: {e}")
+            return None
+    
+    def _create_plotly_pie(self, labels, values, title):
+        """Create Plotly pie/donut chart as JSON"""
+        try:
+            fig = go.Figure(data=[
+                go.Pie(
+                    labels=labels,
+                    values=values,
+                    hole=0.3,  # Donut chart (0 = full pie, 0.3 = donut)
+                    textinfo='label+percent',
+                    textposition='auto',
+                    marker=dict(
+                        colors=self._get_color_palette(len(labels)),
+                        line=dict(color='white', width=2)
+                    ),
+                    hovertemplate='<b>%{label}</b><br>Value: %{value}<br>Percent: %{percent}<extra></extra>'
+                )
+            ])
+            
+            fig.update_layout(
+                title=dict(text=title, font=dict(size=16)),
+                showlegend=True,
+                legend=dict(
+                    orientation="v",
+                    yanchor="middle",
+                    y=0.5,
+                    xanchor="left",
+                    x=1.05
+                ),
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(family="Arial, sans-serif", size=12),
+                margin=dict(l=50, r=150, t=80, b=50),
+                height=400
+            )
+            
+            return fig.to_json()
+        except Exception as e:
+            print(f"⚠️ Plotly pie chart generation failed: {e}")
+            return None
+    
+    def _create_plotly_box(self, df, y_column, x_column=None, title=None):
+        """Create Plotly box plot for distribution analysis as JSON"""
+        try:
+            if x_column and x_column in df.columns:
+                # Grouped box plot by category
+                fig = go.Figure()
+                categories = df[x_column].unique()
+                colors = self._get_color_palette(len(categories))
+                
+                for i, category in enumerate(categories):
+                    category_data = df[df[x_column] == category][y_column]
+                    fig.add_trace(go.Box(
+                        y=category_data,
+                        name=str(category),
+                        marker_color=colors[i],
+                        boxmean='sd'  # Show mean and standard deviation
+                    ))
+                
+                fig.update_layout(
+                    title=title or f"Distribution of {y_column} by {x_column}",
+                    yaxis_title=y_column,
+                    xaxis_title=x_column,
+                    showlegend=True,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    height=400
+                )
+            else:
+                # Single box plot
+                fig = go.Figure(data=[
+                    go.Box(
+                        y=df[y_column],
+                        name=y_column,
+                        marker_color='#3b82f6',
+                        boxmean='sd',
+                        boxpoints='outliers'  # Show outlier points
+                    )
+                ])
+                
+                fig.update_layout(
+                    title=title or f"Distribution of {y_column}",
+                    yaxis_title=y_column,
+                    showlegend=False,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    height=400
+                )
+            
+            fig.update_yaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+            
+            return fig.to_json()
+        except Exception as e:
+            print(f"⚠️ Plotly box plot generation failed: {e}")
             return None
     
     def _explain_metric(self, column_name: str) -> str:

@@ -478,42 +478,50 @@ class NLyticsApp {
         const chartData = this.prepareChartData(viz, metadata);
         
         if (chartData && typeof Chart !== 'undefined') {
-            new Chart(ctx, {
-                type: viz.type,
-                data: chartData,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: {
-                        legend: {
-                            display: false  // Hide legend since all bars have same label
-                        },
-                        title: {
-                            display: !!viz.description,
-                            text: viz.description || '',
-                            font: {
-                                size: 16,
-                                weight: 'bold'
-                            },
-                            padding: 20
-                        }
+            // Different options for different chart types
+            let chartOptions = {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: viz.type === 'pie' || viz.type === 'doughnut' || viz.type === 'line',
+                        position: 'right'
                     },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: !!viz.y_label,
-                                text: viz.y_label || ''
-                            }
+                    title: {
+                        display: !!viz.description,
+                        text: viz.description || '',
+                        font: {
+                            size: 16,
+                            weight: 'bold'
                         },
-                        x: {
-                            title: {
-                                display: !!viz.x_column,
-                                text: viz.x_column || ''
-                            }
-                        }
+                        padding: 20
                     }
                 }
+            };
+            
+            // Add scales only for charts that need them (not pie/doughnut)
+            if (viz.type !== 'pie' && viz.type !== 'doughnut' && viz.type !== 'box') {
+                chartOptions.scales = {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: !!viz.y_label,
+                            text: viz.y_label || ''
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: !!viz.x_column,
+                            text: viz.x_column || ''
+                        }
+                    }
+                };
+            }
+            
+            new Chart(ctx, {
+                type: viz.type === 'pie' ? 'doughnut' : viz.type,  // Use doughnut for pie in Chart.js
+                data: chartData,
+                options: chartOptions
             });
             
             setTimeout(() => this.scrollToBottom(), 200);
@@ -539,6 +547,23 @@ class NLyticsApp {
                     borderColor: borderColors,
                     borderWidth: 2,
                     borderRadius: 6
+                }]
+            };
+        }
+        
+        if (viz.type === 'pie' || viz.type === 'doughnut') {
+            // Chart.js fallback for pie/donut charts
+            const colors = viz.colors || this.generateColorPalette(viz.values?.length || 0);
+            const borderColors = colors.map(c => '#ffffff');
+            
+            return {
+                labels: viz.labels || [],
+                datasets: [{
+                    label: viz.description || 'Distribution',
+                    data: viz.values || [],
+                    backgroundColor: colors,
+                    borderColor: borderColors,
+                    borderWidth: 2
                 }]
             };
         }
@@ -582,6 +607,12 @@ class NLyticsApp {
                     pointHoverRadius: 6
                 }]
             };
+        }
+        
+        // Box plots not supported in Chart.js - Plotly only
+        if (viz.type === 'box') {
+            console.warn('Box plots require Plotly - Chart.js fallback not available');
+            return null;
         }
         
         return null;
