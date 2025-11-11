@@ -267,6 +267,176 @@ class InsightGenerator:
             'recommendations': []  # Let AI answer provide the interpretation
         }
     
+    def _create_line_chart(self, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
+        """
+        Create line chart for time-series data
+        
+        Handles:
+        - Date-based time series (date column + value columns)
+        - Multi-entity time series (date + ticker + values)
+        """
+        # Look for date/time column (could be index or column)
+        date_col = None
+        
+        # Check if index looks like dates
+        if hasattr(df.index, 'name') and df.index.name and ('date' in str(df.index.name).lower() or 'time' in str(df.index.name).lower()):
+            date_col = df.index.name
+            df_to_use = df.reset_index()  # Make index into a column
+            # Convert to datetime if it's not already
+            if df_to_use[date_col].dtype == 'object':
+                df_to_use[date_col] = pd.to_datetime(df_to_use[date_col])
+        elif df.index.dtype == 'datetime64[ns]' or str(df.index.dtype).startswith('datetime'):
+            # Index is datetime but unnamed
+            date_col = 'date'
+            df_to_use = df.reset_index()
+            df_to_use.columns = [date_col] + df_to_use.columns.tolist()[1:]
+        else:
+            # Look for date column in columns
+            df_to_use = df.copy()
+            for col in df_to_use.columns:
+                if 'date' in col.lower() or 'time' in col.lower():
+                    date_col = col
+                    # Convert to datetime if it's not already
+                    if df_to_use[date_col].dtype == 'object':
+                        df_to_use[date_col] = pd.to_datetime(df_to_use[date_col])
+                    break
+        
+        if not date_col:
+            # No date column - can't create line chart
+            return None
+        
+        # Check if data is already pivoted (columns are entities) or needs pivoting
+        numeric_cols = df_to_use.select_dtypes(include=['number']).columns.tolist()
+        categorical_cols = df_to_use.select_dtypes(include=['object']).columns.tolist()
+        
+        # Remove date column from categoricals if it's there
+        categorical_cols = [c for c in categorical_cols if c != date_col]
+        
+        if len(categorical_cols) > 0:
+            # Un-pivoted data (has ticker/entity column)
+            # Example: date | ticker | value
+            entity_col = categorical_cols[0]  # ticker, company, etc.
+            
+            if len(numeric_cols) == 0:
+                return None
+            
+            value_col = numeric_cols[0]  # market_cap, price, etc.
+            
+            # Pivot the data: date as index, ticker as columns, value as values
+            try:
+                pivoted = df_to_use.pivot_table(
+                    index=date_col,
+                    columns=entity_col,
+                    values=value_col,
+                    aggfunc='mean'  # Handle duplicates
+                )
+                
+                # Limit to top N entities by final value
+                final_values = pivoted.iloc[-1].sort_values(ascending=False)
+                top_entities = final_values.head(10).index.tolist()
+                pivoted = pivoted[top_entities]
+                
+                # Create Plotly line chart
+                plotly_json = self._create_plotly_line(pivoted, value_col)
+                
+                return {
+                    'type': 'line',
+                    'suitable': True,
+                    'x_column': date_col,
+                    'y_column': value_col,
+                    'entities': top_entities,
+                    'description': f"{self._explain_metric(value_col)} over time",
+                    'plotly': plotly_json
+                }
+            except Exception as e:
+                print(f"⚠️ Failed to pivot data for line chart: {e}")
+                return None
+        
+        else:
+            # Already pivoted data - columns are different entities
+            # Example: date | AAPL | MSFT | GOOGL
+            if len(numeric_cols) == 0:
+                return None
+            
+            # Use df_to_use, date should now be a column
+            try:
+                # Set date as index for plotting
+                df_plot = df_to_use.set_index(date_col)
+                
+                # Limit to 10 series for readability
+                if len(df_plot.columns) > 10:
+                    # Take top 10 by final value
+                    final_values = df_plot.iloc[-1].sort_values(ascending=False)
+                    top_cols = final_values.head(10).index.tolist()
+                    df_plot = df_plot[top_cols]
+                
+                plotly_json = self._create_plotly_line(df_plot, "Value")
+                
+                return {
+                    'type': 'line',
+                    'suitable': True,
+                    'x_column': date_col,
+                    'y_column': 'Value',
+                    'entities': df_plot.columns.tolist(),
+                    'description': "Trend over time",
+                    'plotly': plotly_json
+                }
+            except Exception as e:
+                print(f"⚠️ Failed to create line chart: {e}")
+                import traceback
+                traceback.print_exc()
+                return None
+    
+    def _create_plotly_line(self, df, y_label):
+        """Create Plotly line chart from pivoted DataFrame"""
+        try:
+            fig = go.Figure()
+            
+            colors = self._get_color_palette(len(df.columns))
+            
+            # Add a line for each column (entity)
+            for i, col in enumerate(df.columns):
+                y_values = df[col].tolist()
+                
+                fig.add_trace(go.Scatter(
+                    x=df.index.tolist(),  # Convert index to list explicitly
+                    y=y_values,  # Already converted to list above
+                    mode='lines+markers',
+                    name=str(col),
+                    line=dict(color=colors[i], width=2),
+                    marker=dict(size=6)
+                ))
+            
+            fig.update_layout(
+                title=dict(text=f"{self._explain_metric(y_label)} Over Time", font=dict(size=16)),
+                xaxis_title="Date",
+                yaxis_title=self._explain_metric(y_label),
+                showlegend=True,
+                legend=dict(
+                    orientation="v",
+                    yanchor="top",
+                    y=1,
+                    xanchor="left",
+                    x=1.05
+                ),
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(family="Arial, sans-serif", size=12),
+                margin=dict(l=50, r=150, t=80, b=50),
+                height=400,
+                hovermode='x unified'
+            )
+            
+            fig.update_xaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+            fig.update_yaxes(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+            
+            return fig.to_json()
+        except Exception as e:
+            print(f"⚠️ Plotly line chart generation failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
     def _get_color_palette(self, count: int) -> List[str]:
         """Generate vibrant, professional color palette for charts"""
         # Professional, vibrant color palette
@@ -348,7 +518,16 @@ class InsightGenerator:
             cat_col = categorical_cols[0]
             num_col = numeric_cols[0]
             
-            top_data = df.nlargest(min(10, len(df)), num_col)
+            # IMPORTANT: For time-series data, group by category first!
+            # Check if we have multiple rows per category (time-series)
+            if df[cat_col].duplicated().any():
+                # Time-series data - aggregate by category
+                aggregated = df.groupby(cat_col)[num_col].sum().reset_index()
+                top_data = aggregated.nlargest(min(10, len(aggregated)), num_col)
+            else:
+                # Already aggregated - just sort
+                top_data = df.nlargest(min(10, len(df)), num_col)
+            
             colors = self._get_color_palette(len(top_data))
             metric_explanation = self._explain_metric(num_col)
             
@@ -372,6 +551,10 @@ class InsightGenerator:
                 'y_label': metric_explanation,
                 'plotly': plotly_json
             }
+        
+        elif chart_type == 'line':
+            # Create line chart for time-series data
+            return self._create_line_chart(df)
         
         elif chart_type == 'scatter' and len(numeric_cols) >= 2:
             # Create scatter plot
@@ -448,9 +631,63 @@ class InsightGenerator:
         if rows == 0 or cols == 0:
             return None
         
+        # DEBUG: Print dataframe info
+        print(f"🔍 _suggest_visualization called:")
+        print(f"   Shape: {rows}x{cols}")
+        print(f"   Index type: {type(df.index)}")
+        print(f"   Is DatetimeIndex? {isinstance(df.index, pd.DatetimeIndex)}")
+        print(f"   Columns: {df.columns.tolist()[:5]}")
+        print(f"   Dtypes: {df.dtypes.tolist()[:5]}")
+        
         # Check data types
-        numeric_cols = df.select_dtypes(include=['number']).columns
-        categorical_cols = df.select_dtypes(include=['object']).columns
+        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+        categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+        
+        print(f"   Numeric cols: {len(numeric_cols)}, Categorical: {len(categorical_cols)}")
+        
+        # **NEW: Pattern 0: Detect pivoted time-series data (line chart)**
+        # Characteristics: datetime index + all numeric columns
+        has_datetime_index = isinstance(df.index, pd.DatetimeIndex) or (
+            len(df.index) > 0 and isinstance(df.index[0], (pd.Timestamp, str)) and 
+            pd.api.types.is_datetime64_any_dtype(pd.to_datetime(df.index, errors='coerce'))
+        )
+        
+        # Or check if first column looks like dates
+        has_date_column = False
+        date_col_name = None
+        if len(df.columns) > 0:
+            first_col = df.columns[0]
+            if pd.api.types.is_datetime64_any_dtype(df[first_col]) or \
+               (df[first_col].dtype == 'object' and 'date' in str(first_col).lower()):
+                has_date_column = True
+                date_col_name = first_col
+        
+        # If we have datetime index/column and multiple numeric columns → LINE CHART
+        if (has_datetime_index or has_date_column) and len(numeric_cols) >= 1:
+            # Time-series line chart with multiple series
+            x_col = 'index' if has_datetime_index else date_col_name
+            y_cols = [col for col in numeric_cols if col != date_col_name]  # All numeric cols except date
+            
+            # Limit to first 10 series if more
+            if len(y_cols) > 10:
+                y_cols = y_cols[:10]
+            
+            # Prepare pivoted DataFrame for line chart (index=dates, columns=series)
+            if has_datetime_index:
+                df_plot = df[y_cols].copy()
+            else:
+                df_plot = df.set_index(date_col_name)[y_cols].copy()
+            
+            plotly_json = self._create_plotly_line(df_plot, "Value")
+            
+            return {
+                'type': 'line',
+                'suitable': True,
+                'x_column': x_col,
+                'y_columns': y_cols,
+                'description': f"Time series: {', '.join(y_cols[:3])}{'...' if len(y_cols) > 3 else ''}",
+                'plotly': plotly_json
+            }
         
         # Pattern 1: Check for percentage/ratio data (pie chart candidate)
         if len(categorical_cols) >= 1 and len(numeric_cols) >= 1:

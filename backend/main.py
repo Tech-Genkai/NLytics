@@ -239,6 +239,14 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/logo.png')
+def serve_logo():
+    """Serve the logo file"""
+    from flask import send_file
+    logo_path = os.path.join(os.path.dirname(__file__), '..', 'logo.png')
+    return send_file(logo_path, mimetype='image/png')
+
+
 @app.route('/api/session/new', methods=['POST'])
 def new_session():
     """Create a new chat session"""
@@ -467,7 +475,12 @@ def chat():
         # Phase 3.5: Query Refinement - Make queries more analytically useful
         logger.info("🎯 Phase 3.5: Refining query for better insights...")
         dataset_context_brief = f"{len(df)} rows, {len(df.columns)} columns: {', '.join(df.columns.tolist()[:5])}"
-        refinement = query_refiner.refine_query(user_message, intent_result, dataset_context_brief)
+        refinement = query_refiner.refine_query(
+            user_message, 
+            intent_result, 
+            dataset_context_brief,
+            conversation_history  # Pass conversation history for context
+        )
         
         if refinement.get('refinement_applied'):
             logger.info(f"✨ Query refined: {refinement.get('reasoning')}")

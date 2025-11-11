@@ -110,17 +110,15 @@ class QueryPlanner:
     
     def _build_planning_prompt(self) -> str:
         """System prompt for query planning"""
-        return """You are an expert data analyst creating execution plans for data queries.
+        return """Expert data analyst creating execution plans for complex queries.
 
-Your job is to break down complex data analysis queries into clear, ordered steps.
+TASK: Break down analysis into clear, ordered steps.
 
-Each step should:
-1. Have a clear description of what it does
-2. Specify the operation type (filter, aggregate, transform, sort, etc.)
-3. List dependencies on previous steps
-4. Be executable independently
+STEP REQUIREMENTS:
+• Clear description | Operation type (filter/aggregate/transform/sort/join/calculate)
+• Dependencies on previous steps | Executable independently
 
-Output Format (JSON):
+JSON OUTPUT:
 {
   "steps": [
     {
@@ -128,32 +126,24 @@ Output Format (JSON):
       "description": "Clear description",
       "operation": "filter|aggregate|transform|sort|join|calculate",
       "details": {
-        "columns": ["col1", "col2"],
-        "formula": "optional calculation",
-        "condition": "optional filter condition"
+        "columns": ["col1"],
+        "formula": "optional",
+        "condition": "optional"
       },
       "dependencies": []
     }
   ],
-  "estimated_time": "< 1 second|1-5 seconds|5-30 seconds",
+  "estimated_time": "< 1 sec|1-5 sec|5-30 sec",
   "complexity": "simple|moderate|complex",
-  "explanation": "Why we need these steps"
+  "explanation": "Why these steps"
 }
 
-Examples:
+EXAMPLES:
+"Top 10 fastest growing stocks" → [1. Calculate growth: (close-open)/open, 2. Sort descending, 3. Top 10]
+"Avg price by sector, top 5" → [1. Group by sector, 2. Mean price, 3. Sort, 4. Top 5]
+"Stocks >$100 with volume >1M" → [1. Filter price>100, 2. Filter volume>1M, 3. Return results]
 
-Query: "Show me top 10 fastest growing stocks"
-Steps:
-1. Calculate growth: (close - open) / open
-2. Sort by growth descending
-3. Take top 10 results
-
-Query: "Compare average prices by sector for tech stocks"
-Steps:
-1. Filter to tech sector stocks
-2. Group by sector
-3. Calculate average price per sector
-4. Format results for comparison"""
+Keep it concise but complete."""
 
     def _build_user_planning_prompt(
         self,

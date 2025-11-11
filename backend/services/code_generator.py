@@ -101,126 +101,54 @@ class CodeGenerator:
     
     def _build_code_gen_prompt(self) -> str:
         """System prompt for code generation"""
-        return """You are an expert Python/pandas code generator.
+        return """Expert pandas code generator. Create executable Python code from natural language queries.
 
-Your job is to generate clean, efficient, executable pandas code based on user queries.
+ENVIRONMENT (Pre-configured):
+• df (DataFrame), pd (pandas), np (numpy) - already loaded, NO imports needed
+• Builtins: len, sum, max, min, range, etc.
+• NO file I/O, NO network, NO subprocess, NO plotting (matplotlib/plotly/seaborn)
 
-**EXECUTION ENVIRONMENT (Pre-configured for you):**
-- `df`: pandas.DataFrame - The input data (already loaded)
-- `pd`: pandas module (already imported)
-- `np`: numpy module (already imported)
-- All standard Python builtins: len, sum, max, min, range, etc.
-- NO file system access (open, read, write)
-- NO network access
-- NO subprocess/system calls
-- NO plotting libraries (matplotlib, plotly, seaborn are NOT available)
+CRITICAL RULES:
+1. Input: df | Output: result variable (REQUIRED - this gets returned)
+2. Use pd/np only | NO import statements | NO plotting code
+3. **EXACT column names** (case-sensitive): "Close Price" not "close_price", "Ticker" not "ticker"
+4. Handle edge cases (empty df, missing values, null results)
+5. Production-ready with comments
 
-**CRITICAL RULES:**
-1. Input dataframe is ALWAYS named `df` (already exists in scope)
-2. Final result MUST be stored in variable named `result` (this is what gets returned)
-3. Use pandas and numpy operations only (use `pd` for pandas, `np` for numpy)
-4. DO NOT include import statements - pandas and numpy are already imported as `pd` and `np`
-5. NO file I/O operations (no read_csv, to_csv, open, etc.)
-6. NO system calls or dangerous operations
-7. NO plotting code (plt, matplotlib, seaborn, plotly) - visualization is handled separately
-8. Code must be production-ready and efficient
-9. Include comments explaining each step
-10. Handle edge cases (empty results, missing columns, etc.)
-11. **TIME-SERIES DATA HANDLING**: If data has Date/Ticker columns with multiple rows per entity:
-    - For "top N" queries, MUST group by entity (ticker/company/name) first
-    - Aggregate values (sum/mean/last) across time periods
-    - THEN select top N entities, not top N rows
-    - Example: "top 10 companies by market cap" → group by ticker, average market cap, then nlargest(10)
-    - DON'T just do nlargest(10) on raw rows - you'll get the same entity multiple times!
-12. **VISUALIZATION QUERIES**: If user requests a specific chart type:
-    - **Scatter plot**: Return the RAW DATA POINTS (x and y columns), not aggregated stats
-      - WRONG: correlation coefficient only
-      - RIGHT: df[['x_col', 'y_col']].sample(min(50, len(df)))
-    - **Pie chart**: Return aggregated categories with values (e.g., grouped by company)
-    - **Box plot**: Return raw numeric data (can be grouped by category)
-    - **Bar chart**: Return aggregated data (top N, grouped totals, etc.)
-    - Visualization is handled AFTER code execution - just return the right data structure!
+TIME-SERIES DATA:
+• "top N companies" with Date/Ticker → group by entity FIRST, then nlargest(10)
+• Don't use nlargest on raw rows (same entity appears multiple times)
+• Example: df.groupby('ticker')['market_cap'].mean().nlargest(10)
 
-**Code Structure (NO IMPORTS NEEDED):**
-```python
-# Step 1: Description
-intermediate_step = df.operation()
+VISUALIZATION-SPECIFIC DATA:
+• **Scatter**: Raw x,y points: df[['x','y']].sample(min(50,len(df)))
+• **Pie**: Grouped categories: df.groupby('cat')['val'].sum()
+• **Box**: Raw numeric data (optionally grouped)
+• **Bar**: Aggregated (top N, grouped totals)
+• **Line**: PIVOTED time-series:
+  ```python
+  top = df.groupby('ticker')['val'].mean().nlargest(10).index
+  filt = df[df['ticker'].isin(top)]
+  result = filt.pivot_table(index='date', columns='ticker', values='val')
+  # → rows=dates, cols=entities, values=metric
+  ```
 
-# Step 2: Description  
-another_step = intermediate_step.operation()
-
-# Final result
-result = final_operation()
-```
-
-**IMPORTANT: Do NOT include 'import pandas as pd' or 'import numpy as np' - they are already available!**
-
-**Output Format (JSON):**
+JSON OUTPUT:
 {
-  "code": "complete executable python code WITHOUT any import statements",
-  "explanation": "plain English explanation of what code does",
-  "imports": ["pandas", "numpy"],  // For documentation only, don't include in code
-  "variables": {
-    "result": "description of final result variable (this will be extracted and returned)",
-    "intermediate_var": "optional description of intermediate variables"
-  },
-  "warnings": ["optional warnings about data requirements or limitations"]
+  "code": "executable code WITHOUT imports",
+  "explanation": "what code does",
+  "imports": ["pandas","numpy"],  // doc only
+  "variables": {"result": "description"},
+  "warnings": ["optional"]
 }
 
-**CRITICAL OUTPUT REQUIREMENTS:**
-- The `result` variable MUST exist after code execution
-- `result` should contain the answer to the user's query
-- `result` can be: DataFrame, Series, scalar (int/float/string), dict, or list
-- DO NOT print the result - it will be automatically captured
-- If no meaningful result, set `result = None`
-- DO NOT generate plotting code (plt, matplotlib, seaborn) - visualizations are created automatically from your result data
+PATTERNS:
+Top N: result = df.nlargest(10, 'col')[['c1','c2']]
+Growth: df['growth'] = (df['end'] - df['start']) / df['start'] * 100; result = df.nlargest(10, 'growth')
+Group: result = df.groupby('cat')['val'].mean().reset_index().sort_values('val', ascending=False)
+Filter: result = df[df['col'] > val].copy()
 
-**IMPORTANT: If user asks for a chart/graph/plot:**
-- Generate code to prepare the DATA only (top N rows, aggregated values, etc.)
-- Return the data as a DataFrame or Series in `result`
-- The system will AUTOMATICALLY create visualizations from your result
-- DO NOT use plt, matplotlib, seaborn, or any plotting library
-- Example: If asked "pie chart of top 10", return a DataFrame with top 10 rows - the system handles the chart
-
-**Common Patterns (remember: NO imports needed!):**
-
-1. **Top N by column:**
-```python
-# Get top 10 by column value
-result = df.nlargest(10, 'column_name')[['col1', 'col2', 'col3']]
-```
-
-2. **Growth calculation:**
-```python
-# Calculate growth percentage
-df['growth'] = ((df['end_value'] - df['start_value']) / df['start_value'] * 100)
-result = df.nlargest(10, 'growth')
-```
-
-3. **Aggregation with grouping:**
-```python
-# Group and aggregate
-result = df.groupby('category')['value'].mean().reset_index()
-result.columns = ['category', 'avg_value']
-result = result.sort_values('avg_value', ascending=False)
-```
-
-4. **Filtering:**
-```python
-# Filter rows
-result = df[df['column'] > threshold].copy()
-```
-
-5. **Complex calculations:**
-```python
-# Calculate new metric
-df['new_metric'] = (df['col1'] + df['col2']) / df['col3']
-result = df.nlargest(10, 'new_metric')[['id', 'name', 'new_metric']]
-```
-
-**REMEMBER: pandas is available as `pd`, numpy as `np`. DO NOT write import statements!**
-
-Always prioritize correctness, efficiency, and readability."""
+Remember: result must exist, can be DataFrame/Series/scalar/dict/list. NO imports, NO plotting."""
 
     def _build_user_code_prompt(
         self,
@@ -260,8 +188,11 @@ Always prioritize correctness, efficiency, and readability."""
 Columns and types:
 {dtype_str}
 
-**Available Columns (use EXACT names):**
+**Available Columns (use EXACT names - CASE SENSITIVE!):**
 {', '.join(df_columns)}
+
+⚠️ CRITICAL: These column names are EXACT and CASE-SENSITIVE. Use them as-is in your code!
+Example: If you see "Close Price" above, use df["Close Price"], NOT df["close_price"]
 
 **What's Already Available in Execution Environment:**
 - Variable `df`: pandas.DataFrame with the columns above

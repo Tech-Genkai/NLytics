@@ -31,10 +31,17 @@ class QueryRefiner:
         self,
         original_query: str,
         intent_result: Dict[str, Any],
-        dataset_context: str
+        dataset_context: str,
+        conversation_history: list = None
     ) -> Dict[str, Any]:
         """
         Refine the query to be more analytically useful
+        
+        Args:
+            original_query: The user's query
+            intent_result: The detected intent
+            dataset_context: Brief dataset info
+            conversation_history: Previous messages for context
         
         Returns:
             {
@@ -45,7 +52,7 @@ class QueryRefiner:
             }
         """
         system_prompt = self._build_system_prompt()
-        user_prompt = self._build_user_prompt(original_query, intent_result, dataset_context)
+        user_prompt = self._build_user_prompt(original_query, intent_result, dataset_context, conversation_history)
         
         try:
             response = self.client.chat.completions.create(
@@ -75,155 +82,83 @@ class QueryRefiner:
             }
     
     def _build_system_prompt(self) -> str:
-        return """You are a data analysis expert who helps users get better insights from their queries.
+        return """Data analysis expert. Refine queries for better insights while RESPECTING user intent.
 
-Your job: Take a user's query and refine it to be MORE USEFUL for analysis.
+CORE PRINCIPLE: User intent first → then enhance for better analysis.
 
-**Key Principle: RESPECT USER INTENT FIRST, THEN ENHANCE**
+CONVERSATIONAL CONTEXT (PRIORITY 1):
+• Follow-up queries ("bar graph", "pie chart") = SAME DATA from previous query, different viz
+• Example: "top 10 companies" → "bar graph" = bar chart of THOSE 10 companies, not new analysis
+• Preserve filters/limits from previous query, only change visualization
 
-**CRITICAL: If user EXPLICITLY requests a visualization type, PRESERVE IT!**
-- "pie chart of..." → Keep pie chart, don't suggest bar chart
-- "scatter plot of..." → Keep scatter plot
-- "line graph of..." → Keep line graph
-- "box plot of..." → Keep box plot
-- Only suggest alternatives if NO visualization type is mentioned
+EXPLICIT VISUALIZATION (PRIORITY 2):
+• User specifies chart type → PRESERVE IT: "pie chart of X" → keep pie, refine data only
+• Chart keywords: pie chart|bar graph|scatter plot|line chart|box plot|histogram
+• Don't suggest alternatives when user specifies type
 
-When users ask for "the highest/best/top" - they usually want to:
-1. See the TOP item IN CONTEXT of others
-2. Understand HOW MUCH better it is
-3. Compare it to alternatives
+REFINEMENT RULES:
+1. "Highest/best/top X": Show top 10 for comparison (unless "top N" specified or "the single best")
+2. Single values: Convert to comparisons when useful ("average price" → "avg by category")
+3. "Most/least": Show top N + bottom N for full picture
+4. Simple queries: No refinement ("show all", "filter by X", "count rows")
 
-**Refinement Rules:**
+VISUALIZATION HINTS (only if not specified):
+• Rankings/comparisons → bar | Distributions → histogram/box
+• Trends → line | Correlations → scatter | Parts of whole → pie
 
-1. **EXPLICIT VISUALIZATION REQUESTS (HIGHEST PRIORITY):**
-   - ✅ DO: Preserve the requested chart type (pie, bar, scatter, line, box, etc.)
-   - ✅ DO: Only refine the DATA query, not the visualization
-   - Example: "pie chart of top 10 stocks" → "show top 10 stocks by market cap" (keep pie chart intent)
-   - Example: "scatter plot of price vs volume" → keep scatter plot
-   - ❌ DON'T: Suggest a different chart type when user specifies one
-
-2. **"Highest/Best/Top X" queries:**
-   - ❌ DON'T: Return just 1 result unless explicitly asked for "the one" or "which single"
-   - ✅ DO: Show top 5-10 for comparison (default to 10 if unspecified)
-   - If user says "top 5" or "top 3", respect their number
-   - Example: "highest growing stock" → "show top 10 stocks by growth percentage, ranked"
-   - Example: "show me the single best stock" → "show top 1 stock" (respect literal request)
-
-2. **Single value queries:**
-   - ❌ DON'T: Return a scalar if a comparison would be more useful
-   - ✅ DO: Show rankings, distributions, or breakdowns
-   - Example: "average price" → "show average price by category"
-
-3. **"Most/Least" queries:**
-   - ✅ DO: Show top N and bottom N for full picture
-   - Example: "most expensive" → "show top 10 and bottom 10 by price"
-
-4. **Keep simple queries simple:**
-   - "show all data" → no refinement needed
-   - "filter by X" → no refinement needed
-   - "count rows" → no refinement needed
-
-5. **Visualization hints (ONLY if user didn't specify):**
-   - If user said "pie chart" → Use "pie" (don't suggest bar!)
-   - If user said "scatter plot" → Use "scatter"
-   - If user said "line chart" → Use "line"
-   - If NO visualization mentioned:
-     - Top N rankings → suggest bar chart
-     - Comparisons → suggest bar chart or grouped bar
-     - Distributions → suggest histogram or box plot
-     - Trends → suggest line chart
-     - Correlations → suggest scatter plot
-
-**Output Format (JSON):**
+JSON OUTPUT:
 {
-  "refined_query": "the improved query text",
+  "refined_query": "improved query",
   "refinement_applied": true/false,
-  "reasoning": "brief explanation of why refinement helps",
+  "reasoning": "why this helps",
   "visualization_hint": "pie|bar|line|scatter|histogram|box|null",
-  "requested_chart_type": "pie|bar|line|scatter|box|null (if user explicitly requested)",
+  "requested_chart_type": "chart_type or null",
   "show_comparison": true/false,
-  "suggested_limit": 10 (for top N queries)
+  "suggested_limit": 10,
+  "is_followup": true/false
 }
 
-**CRITICAL: Check for these keywords to detect explicit visualization requests:**
-- "pie chart", "pie graph", "donut chart" → requested_chart_type: "pie"
-- "bar chart", "bar graph" → requested_chart_type: "bar"
-- "scatter plot", "scatter chart" → requested_chart_type: "scatter"
-- "line chart", "line graph" → requested_chart_type: "line"
-- "box plot", "box chart" → requested_chart_type: "box"
-- "histogram" → requested_chart_type: "histogram"
-- If none found → requested_chart_type: null
-
-**Examples:**
-
-Input: "pie chart of top 10 companies by market cap"
-Output:
-{
-  "refined_query": "show top 10 companies by market capitalization",
-  "refinement_applied": true,
-  "reasoning": "User explicitly requested pie chart - preserving that visualization choice while ensuring top 10 data is prepared",
-  "visualization_hint": "pie",
-  "requested_chart_type": "pie",
-  "show_comparison": true,
-  "suggested_limit": 10
-}
-
-Input: "highest growing stock"
-Output:
-{
-  "refined_query": "show growth percentage for all stocks, sorted by growth descending, show top 10",
-  "refinement_applied": true,
-  "reasoning": "User wants to see the highest growing stock IN CONTEXT of others, not just a single value. Top 10 comparison is more insightful.",
-  "visualization_hint": "bar",
-  "requested_chart_type": null,
-  "show_comparison": true,
-  "suggested_limit": 10
-}
-
-Input: "average price"
-Output:
-{
-  "refined_query": "calculate average price and show price distribution by category",
-  "refinement_applied": true,
-  "reasoning": "A single average is less useful than seeing how prices vary across categories",
-  "visualization_hint": "bar",
-  "requested_chart_type": null,
-  "show_comparison": true,
-  "suggested_limit": null
-}
-
-Input: "show all technology stocks"
-Output:
-{
-  "refined_query": "show all technology stocks",
-  "refinement_applied": false,
-  "reasoning": "Query is already clear and specific, no refinement needed",
-  "visualization_hint": null,
-  "requested_chart_type": null,
-  "show_comparison": false,
-  "suggested_limit": null
-}
-
-Input: "scatter plot of volume vs price"
-Output:
-{
-  "refined_query": "show relationship between volume and price for all stocks",
-  "refinement_applied": true,
-  "reasoning": "User explicitly requested scatter plot - preserving that choice",
-  "visualization_hint": "scatter",
-  "requested_chart_type": "scatter",
-  "show_comparison": false,
-  "suggested_limit": null
-}
-"""
+EXAMPLES:
+"pie chart of top 10 stocks" → {refined: "top 10 stocks by market cap", requested_chart_type: "pie"}
+"bar graph" (after "top 10 companies") → {refined: "top 10 companies as bar", requested_chart_type: "bar", is_followup: true}
+"highest growing stock" → {refined: "growth % for all stocks, top 10 descending", visualization_hint: "bar", suggested_limit: 10}
+"show all tech stocks" → {refined: "show all tech stocks", refinement_applied: false}"""
     
     def _build_user_prompt(
         self,
         original_query: str,
         intent_result: Dict[str, Any],
-        dataset_context: str
+        dataset_context: str,
+        conversation_history: list = None
     ) -> str:
-        return f"""Original Query: {original_query}
+        prompt_parts = []
+        
+        # Add conversation context if available
+        if conversation_history:
+            # Extract last few user queries and assistant answers for context
+            context_messages = []
+            for msg in conversation_history[-6:]:  # Last 6 messages (3 exchanges)
+                msg_type = msg.get('type', '')
+                content = msg.get('content', '')
+                metadata = msg.get('metadata', {})
+                
+                if msg_type == 'user':
+                    context_messages.append(f"User asked: {content}")
+                elif msg_type == 'assistant' and metadata.get('type') == 'answer':
+                    # Include the answer for context
+                    context_messages.append(f"Assistant answered: {content[:200]}...")
+                elif msg_type == 'system' and metadata.get('type') == 'insights':
+                    # Include insights about what data was shown
+                    insights_data = metadata.get('insights', {})
+                    if insights_data.get('narrative'):
+                        context_messages.append(f"Showed: {insights_data['narrative'][:150]}...")
+            
+            if context_messages:
+                prompt_parts.append("Conversation History (Recent Context):")
+                prompt_parts.append("\n".join(context_messages))
+                prompt_parts.append("")
+        
+        prompt_parts.append(f"""Current Query: {original_query}
 
 AI Intent Understanding:
 - Query Type: {intent_result.get('intent', 'unknown')}
@@ -233,7 +168,11 @@ AI Intent Understanding:
 Dataset Context:
 {dataset_context}
 
-Should this query be refined for better analysis? If yes, how?"""
+**CRITICAL: Check conversation history above. If user's current query is a follow-up (e.g., "bar graph", "analyze its growth", "show me more"), it refers to the SAME DATA from the previous query. Preserve the data context (e.g., top 10 companies) from the previous exchange.**
+
+Should this query be refined for better analysis? If yes, how?""")
+        
+        return "\n".join(prompt_parts)
     
     def format_refinement_for_display(self, refinement: Dict[str, Any]) -> str:
         """Format refinement info as markdown"""

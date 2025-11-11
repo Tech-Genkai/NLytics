@@ -95,94 +95,81 @@ class AIIntentDetector:
             }
     
     def _build_dataset_context(self, df: pd.DataFrame) -> str:
-        """Build comprehensive dataset context for the AI"""
+        """Build lean but sufficient dataset context for the AI"""
         context_parts = []
         
         # Basic info
-        context_parts.append(f"Dataset: {len(df)} rows × {len(df.columns)} columns")
+        context_parts.append(f"Dataset: {len(df)} rows × {len(df.columns)} columns\n")
         
-        # Column information with types and sample values
-        context_parts.append("\nColumns:")
+        # Column information with types and 2 sample values only
+        context_parts.append("Columns:")
         for col in df.columns:
             dtype = str(df[col].dtype)
-            non_null = df[col].count()
-            null_count = len(df) - non_null
             
-            # Get sample values (unique, limited)
-            sample_values = df[col].dropna().unique()[:5].tolist()
-            sample_str = ", ".join([str(v)[:50] for v in sample_values])
+            # Get 2 sample values (sufficient for AI to understand data)
+            sample_values = df[col].dropna().unique()[:2].tolist()
+            sample_str = ", ".join([str(v)[:40] for v in sample_values])
             
-            context_parts.append(
-                f"  - {col} ({dtype}): {non_null} non-null values, "
-                f"{null_count} nulls. Samples: [{sample_str}]"
-            )
+            # Simplified format - AI doesn't need null counts for every column
+            context_parts.append(f"  - {col} ({dtype}): {sample_str}")
         
-        # Statistical summary for numeric columns
+        # Quick statistics for top 5 numeric columns (reduced from 10)
         numeric_cols = df.select_dtypes(include=['number']).columns
         if len(numeric_cols) > 0:
-            context_parts.append("\nNumeric Column Statistics:")
-            for col in numeric_cols[:10]:  # Limit to first 10 numeric columns
+            context_parts.append("\nKey Statistics:")
+            for col in numeric_cols[:5]:
                 stats = df[col].describe()
+                # 1 decimal place is sufficient for AI understanding
                 context_parts.append(
-                    f"  - {col}: min={stats['min']:.2f}, max={stats['max']:.2f}, "
-                    f"mean={stats['mean']:.2f}, median={stats['50%']:.2f}"
+                    f"  - {col}: range {stats['min']:.1f}-{stats['max']:.1f}, avg {stats['mean']:.1f}"
                 )
         
         return "\n".join(context_parts)
     
     def _build_system_prompt(self) -> str:
         """Build the system prompt for the AI"""
-        return """You are an expert data analyst assistant. Your job is to understand user queries about their dataset and extract structured intent information.
+        return """Expert data analyst. Extract structured intent from natural language queries.
 
-Given a user's natural language query and the dataset context, you must:
-1. Determine what the user wants to do (intent)
-2. Identify which columns they're referring to
-3. Extract any filters, aggregations, groupings, or sorting requirements
-4. Determine if you have enough information or need clarification
+TASK: Analyze user query + dataset context → Return JSON with intent, columns, operations.
 
-Intents:
-- summary: Show overview/summary of data
-- aggregate: Calculate statistics (avg, sum, count, min, max, etc.)
-- filter: Filter rows based on conditions
-- top_bottom: Show top N or bottom N rows by a column
-- group_by: Aggregate data grouped by a column
-- distribution: Show distribution/breakdown of values
-- compare: Compare values between groups
-- trend: Analyze trends over time
-- correlation: Find relationships between columns
+INTENTS:
+• summary: Overview/summary | aggregate: Stats (avg, sum, count, min, max)
+• filter: Filter rows | top_bottom: Top/bottom N by column | group_by: Aggregate by group
+• distribution: Value breakdown | compare: Compare groups | trend: Time analysis
+• correlation: Relationships | visualization: Change chart type for existing data
 
-Output Format (JSON):
+JSON FORMAT:
 {
   "intent": "intent_name",
   "confidence": 0.95,
-  "columns": ["column1", "column2"],
+  "columns": ["col1", "col2"],
   "aggregation": "mean|sum|count|min|max|median|null",
   "filters": [{"column": "col", "operator": ">|<|==|!=|>=|<=", "value": "val"}],
   "group_by": "column_name or null",
-  "sort_by": {"column": "column_name", "ascending": true/false} or null,
+  "sort_by": {"column": "name", "ascending": true/false} or null,
   "limit": 10 or null,
   "clarifications_needed": [],
-  "explanation": "Brief explanation of what you understood"
+  "explanation": "Brief explanation"
 }
 
-Important Rules:
-- Use EXACT column names from the dataset context
-- Be smart about column name matching (e.g., "price" could match "close_price" if that's the only price column)
-- If the query is ambiguous, leave clarifications_needed empty and make your best intelligent guess
-- For queries like "highest valued stock", understand they want top N sorted by a value column
-- Consider the conversation history for context
-- Only ask for clarification if truly necessary (multiple equally valid options)
+CRITICAL RULES:
+• Use EXACT column names from dataset (case-sensitive)
+• Smart matching: "price" → "close_price" if only price column
+• Minimal clarifications - make intelligent guesses when reasonable
+• "highest valued stock" = top N sorted by value (not just 1)
+• Conversational context: "bar graph" after "top 10 companies" = bar graph of THOSE companies
+• Follow-up viz requests: intent="visualization", preserve previous data context
 
-**CRITICAL: Understanding "Growth" queries:**
-- "highest growing" = calculate PERCENTAGE GROWTH or RATE OF CHANGE, not just highest value
-- "fastest growing" = calculate GROWTH RATE, not just highest value
-- "biggest increase" = calculate CHANGE or GROWTH, not just final value
-- Growth calculation depends on data structure:
-  * For price data: (current - previous) / previous * 100
-  * For time series: trend analysis or period-over-period change
-  * For single snapshot: (close - open) / open * 100
-- Always capture growth-related intent in the "explanation" field
-- Let the query planner determine the specific calculation method based on available columns"""
+GROWTH QUERIES:
+• "highest growing" = PERCENTAGE GROWTH, not highest value
+• "fastest growing" = GROWTH RATE | "biggest increase" = CHANGE/GROWTH
+• Calculation: (current - previous) / previous * 100 or (close - open) / open * 100
+• Capture growth intent in "explanation", let query planner determine method
+
+CONVERSATION CONTEXT:
+• Track previous queries: "top 10 X" → "bar graph" = visualize same data
+• Pronouns: "analyze its growth" = company from previous context
+• Maintain continuity across conversation"""
 
     def _build_user_prompt(
         self, 
