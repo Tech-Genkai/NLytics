@@ -1400,6 +1400,7 @@ console.log(result.answer);
 
 ### cURL Examples
 
+**Linux/Mac:**
 ```bash
 # Analyze
 curl -X POST http://localhost:5000/api/v1/analyze \
@@ -1409,10 +1410,22 @@ curl -X POST http://localhost:5000/api/v1/analyze \
 # Validate code
 curl -X POST http://localhost:5000/api/v1/code/validate \
   -H "Content-Type: application/json" \
-  -d '{"code": "df.describe()", "columns": ["A", "B"]}'
+  -d '{"code": "result = df.describe()", "columns": ["A", "B"]}'
 
 # Health check
 curl http://localhost:5000/api/health
+```
+
+**PowerShell (Windows):**
+```powershell
+# Validate code
+Invoke-RestMethod -Uri "http://localhost:5000/api/v1/code/validate" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{"code": "result = df.head(10)", "columns": ["Symbol", "Close", "Open"]}'
+
+# Health check
+Invoke-RestMethod http://localhost:5000/api/health
 ```
 
 ---

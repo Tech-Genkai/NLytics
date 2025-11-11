@@ -75,7 +75,9 @@ class CodeGenerator:
                     continue
                 filtered_lines.append(line)
             
-            cleaned_code = '\n'.join(filtered_lines)
+            # Dedent the code to remove leading whitespace (fixes indentation issues)
+            import textwrap
+            cleaned_code = textwrap.dedent('\n'.join(filtered_lines)).strip()
             
             return {
                 'code': cleaned_code,
